@@ -1,6 +1,6 @@
 var webpack = require("webpack");
 module.exports = {
-  // devtool: "source-map",/*调试工具*/
+  devtool: "source-map",/*调试工具*/
   entry: './index.js',
   output: {
     //输出后的文件名

@@ -60,11 +60,420 @@
 /******/ 	__webpack_require__.p = "";
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 1);
+/******/ 	return __webpack_require__(__webpack_require__.s = 5);
 /******/ })
 /************************************************************************/
 /******/ ([
 /* 0 */
+/***/ (function(module, exports) {
+
+/*
+	MIT License http://www.opensource.org/licenses/mit-license.php
+	Author Tobias Koppers @sokra
+*/
+// css base code, injected by the css-loader
+module.exports = function(useSourceMap) {
+	var list = [];
+
+	// return the list of modules as css string
+	list.toString = function toString() {
+		return this.map(function (item) {
+			var content = cssWithMappingToString(item, useSourceMap);
+			if(item[2]) {
+				return "@media " + item[2] + "{" + content + "}";
+			} else {
+				return content;
+			}
+		}).join("");
+	};
+
+	// import a list of modules into the list
+	list.i = function(modules, mediaQuery) {
+		if(typeof modules === "string")
+			modules = [[null, modules, ""]];
+		var alreadyImportedModules = {};
+		for(var i = 0; i < this.length; i++) {
+			var id = this[i][0];
+			if(typeof id === "number")
+				alreadyImportedModules[id] = true;
+		}
+		for(i = 0; i < modules.length; i++) {
+			var item = modules[i];
+			// skip already imported module
+			// this implementation is not 100% perfect for weird media query combinations
+			//  when a module is imported multiple times with different media queries.
+			//  I hope this will never occur (Hey this way we have smaller bundles)
+			if(typeof item[0] !== "number" || !alreadyImportedModules[item[0]]) {
+				if(mediaQuery && !item[2]) {
+					item[2] = mediaQuery;
+				} else if(mediaQuery) {
+					item[2] = "(" + item[2] + ") and (" + mediaQuery + ")";
+				}
+				list.push(item);
+			}
+		}
+	};
+	return list;
+};
+
+function cssWithMappingToString(item, useSourceMap) {
+	var content = item[1] || '';
+	var cssMapping = item[3];
+	if (!cssMapping) {
+		return content;
+	}
+
+	if (useSourceMap && typeof btoa === 'function') {
+		var sourceMapping = toComment(cssMapping);
+		var sourceURLs = cssMapping.sources.map(function (source) {
+			return '/*# sourceURL=' + cssMapping.sourceRoot + source + ' */'
+		});
+
+		return [content].concat(sourceURLs).concat([sourceMapping]).join('\n');
+	}
+
+	return [content].join('\n');
+}
+
+// Adapted from convert-source-map (MIT)
+function toComment(sourceMap) {
+	// eslint-disable-next-line no-undef
+	var base64 = btoa(unescape(encodeURIComponent(JSON.stringify(sourceMap))));
+	var data = 'sourceMappingURL=data:application/json;charset=utf-8;base64,' + base64;
+
+	return '/*# ' + data + ' */';
+}
+
+
+/***/ }),
+/* 1 */
+/***/ (function(module, exports, __webpack_require__) {
+
+/*
+  MIT License http://www.opensource.org/licenses/mit-license.php
+  Author Tobias Koppers @sokra
+  Modified by Evan You @yyx990803
+*/
+
+var hasDocument = typeof document !== 'undefined'
+
+if (typeof DEBUG !== 'undefined' && DEBUG) {
+  if (!hasDocument) {
+    throw new Error(
+    'vue-style-loader cannot be used in a non-browser environment. ' +
+    "Use { target: 'node' } in your Webpack config to indicate a server-rendering environment."
+  ) }
+}
+
+var listToStyles = __webpack_require__(15)
+
+/*
+type StyleObject = {
+  id: number;
+  parts: Array<StyleObjectPart>
+}
+
+type StyleObjectPart = {
+  css: string;
+  media: string;
+  sourceMap: ?string
+}
+*/
+
+var stylesInDom = {/*
+  [id: number]: {
+    id: number,
+    refs: number,
+    parts: Array<(obj?: StyleObjectPart) => void>
+  }
+*/}
+
+var head = hasDocument && (document.head || document.getElementsByTagName('head')[0])
+var singletonElement = null
+var singletonCounter = 0
+var isProduction = false
+var noop = function () {}
+
+// Force single-tag solution on IE6-9, which has a hard limit on the # of <style>
+// tags it will allow on a page
+var isOldIE = typeof navigator !== 'undefined' && /msie [6-9]\b/.test(navigator.userAgent.toLowerCase())
+
+module.exports = function (parentId, list, _isProduction) {
+  isProduction = _isProduction
+
+  var styles = listToStyles(parentId, list)
+  addStylesToDom(styles)
+
+  return function update (newList) {
+    var mayRemove = []
+    for (var i = 0; i < styles.length; i++) {
+      var item = styles[i]
+      var domStyle = stylesInDom[item.id]
+      domStyle.refs--
+      mayRemove.push(domStyle)
+    }
+    if (newList) {
+      styles = listToStyles(parentId, newList)
+      addStylesToDom(styles)
+    } else {
+      styles = []
+    }
+    for (var i = 0; i < mayRemove.length; i++) {
+      var domStyle = mayRemove[i]
+      if (domStyle.refs === 0) {
+        for (var j = 0; j < domStyle.parts.length; j++) {
+          domStyle.parts[j]()
+        }
+        delete stylesInDom[domStyle.id]
+      }
+    }
+  }
+}
+
+function addStylesToDom (styles /* Array<StyleObject> */) {
+  for (var i = 0; i < styles.length; i++) {
+    var item = styles[i]
+    var domStyle = stylesInDom[item.id]
+    if (domStyle) {
+      domStyle.refs++
+      for (var j = 0; j < domStyle.parts.length; j++) {
+        domStyle.parts[j](item.parts[j])
+      }
+      for (; j < item.parts.length; j++) {
+        domStyle.parts.push(addStyle(item.parts[j]))
+      }
+      if (domStyle.parts.length > item.parts.length) {
+        domStyle.parts.length = item.parts.length
+      }
+    } else {
+      var parts = []
+      for (var j = 0; j < item.parts.length; j++) {
+        parts.push(addStyle(item.parts[j]))
+      }
+      stylesInDom[item.id] = { id: item.id, refs: 1, parts: parts }
+    }
+  }
+}
+
+function createStyleElement () {
+  var styleElement = document.createElement('style')
+  styleElement.type = 'text/css'
+  head.appendChild(styleElement)
+  return styleElement
+}
+
+function addStyle (obj /* StyleObjectPart */) {
+  var update, remove
+  var styleElement = document.querySelector('style[data-vue-ssr-id~="' + obj.id + '"]')
+
+  if (styleElement) {
+    if (isProduction) {
+      // has SSR styles and in production mode.
+      // simply do nothing.
+      return noop
+    } else {
+      // has SSR styles but in dev mode.
+      // for some reason Chrome can't handle source map in server-rendered
+      // style tags - source maps in <style> only works if the style tag is
+      // created and inserted dynamically. So we remove the server rendered
+      // styles and inject new ones.
+      styleElement.parentNode.removeChild(styleElement)
+    }
+  }
+
+  if (isOldIE) {
+    // use singleton mode for IE9.
+    var styleIndex = singletonCounter++
+    styleElement = singletonElement || (singletonElement = createStyleElement())
+    update = applyToSingletonTag.bind(null, styleElement, styleIndex, false)
+    remove = applyToSingletonTag.bind(null, styleElement, styleIndex, true)
+  } else {
+    // use multi-style-tag mode in all other cases
+    styleElement = createStyleElement()
+    update = applyToTag.bind(null, styleElement)
+    remove = function () {
+      styleElement.parentNode.removeChild(styleElement)
+    }
+  }
+
+  update(obj)
+
+  return function updateStyle (newObj /* StyleObjectPart */) {
+    if (newObj) {
+      if (newObj.css === obj.css &&
+          newObj.media === obj.media &&
+          newObj.sourceMap === obj.sourceMap) {
+        return
+      }
+      update(obj = newObj)
+    } else {
+      remove()
+    }
+  }
+}
+
+var replaceText = (function () {
+  var textStore = []
+
+  return function (index, replacement) {
+    textStore[index] = replacement
+    return textStore.filter(Boolean).join('\n')
+  }
+})()
+
+function applyToSingletonTag (styleElement, index, remove, obj) {
+  var css = remove ? '' : obj.css
+
+  if (styleElement.styleSheet) {
+    styleElement.styleSheet.cssText = replaceText(index, css)
+  } else {
+    var cssNode = document.createTextNode(css)
+    var childNodes = styleElement.childNodes
+    if (childNodes[index]) styleElement.removeChild(childNodes[index])
+    if (childNodes.length) {
+      styleElement.insertBefore(cssNode, childNodes[index])
+    } else {
+      styleElement.appendChild(cssNode)
+    }
+  }
+}
+
+function applyToTag (styleElement, obj) {
+  var css = obj.css
+  var media = obj.media
+  var sourceMap = obj.sourceMap
+
+  if (media) {
+    styleElement.setAttribute('media', media)
+  }
+
+  if (sourceMap) {
+    // https://developer.chrome.com/devtools/docs/javascript-debugging
+    // this makes source maps inside style tags work properly in Chrome
+    css += '\n/*# sourceURL=' + sourceMap.sources[0] + ' */'
+    // http://stackoverflow.com/a/26603875
+    css += '\n/*# sourceMappingURL=data:application/json;base64,' + btoa(unescape(encodeURIComponent(JSON.stringify(sourceMap)))) + ' */'
+  }
+
+  if (styleElement.styleSheet) {
+    styleElement.styleSheet.cssText = css
+  } else {
+    while (styleElement.firstChild) {
+      styleElement.removeChild(styleElement.firstChild)
+    }
+    styleElement.appendChild(document.createTextNode(css))
+  }
+}
+
+
+/***/ }),
+/* 2 */
+/***/ (function(module, exports) {
+
+/* globals __VUE_SSR_CONTEXT__ */
+
+// IMPORTANT: Do NOT use ES2015 features in this file.
+// This module is a runtime utility for cleaner component module output and will
+// be included in the final webpack user bundle.
+
+module.exports = function normalizeComponent (
+  rawScriptExports,
+  compiledTemplate,
+  functionalTemplate,
+  injectStyles,
+  scopeId,
+  moduleIdentifier /* server only */
+) {
+  var esModule
+  var scriptExports = rawScriptExports = rawScriptExports || {}
+
+  // ES6 modules interop
+  var type = typeof rawScriptExports.default
+  if (type === 'object' || type === 'function') {
+    esModule = rawScriptExports
+    scriptExports = rawScriptExports.default
+  }
+
+  // Vue.extend constructor export interop
+  var options = typeof scriptExports === 'function'
+    ? scriptExports.options
+    : scriptExports
+
+  // render functions
+  if (compiledTemplate) {
+    options.render = compiledTemplate.render
+    options.staticRenderFns = compiledTemplate.staticRenderFns
+    options._compiled = true
+  }
+
+  // functional template
+  if (functionalTemplate) {
+    options.functional = true
+  }
+
+  // scopedId
+  if (scopeId) {
+    options._scopeId = scopeId
+  }
+
+  var hook
+  if (moduleIdentifier) { // server build
+    hook = function (context) {
+      // 2.3 injection
+      context =
+        context || // cached call
+        (this.$vnode && this.$vnode.ssrContext) || // stateful
+        (this.parent && this.parent.$vnode && this.parent.$vnode.ssrContext) // functional
+      // 2.2 with runInNewContext: true
+      if (!context && typeof __VUE_SSR_CONTEXT__ !== 'undefined') {
+        context = __VUE_SSR_CONTEXT__
+      }
+      // inject component styles
+      if (injectStyles) {
+        injectStyles.call(this, context)
+      }
+      // register component module identifier for async chunk inferrence
+      if (context && context._registeredComponents) {
+        context._registeredComponents.add(moduleIdentifier)
+      }
+    }
+    // used by ssr in case component is cached and beforeCreate
+    // never gets called
+    options._ssrRegister = hook
+  } else if (injectStyles) {
+    hook = injectStyles
+  }
+
+  if (hook) {
+    var functional = options.functional
+    var existing = functional
+      ? options.render
+      : options.beforeCreate
+
+    if (!functional) {
+      // inject component registration as beforeCreate hook
+      options.beforeCreate = existing
+        ? [].concat(existing, hook)
+        : [hook]
+    } else {
+      // register for functioal component in vue file
+      options.render = function renderWithStyleInjection (h, context) {
+        hook.call(context)
+        return existing(h, context)
+      }
+    }
+  }
+
+  return {
+    esModule: esModule,
+    exports: scriptExports,
+    options: options
+  }
+}
+
+
+/***/ }),
+/* 3 */
 /***/ (function(module, exports) {
 
 // shim for using process in browser
@@ -254,43 +663,135 @@ process.umask = function() { return 0; };
 
 
 /***/ }),
-/* 1 */
+/* 4 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_vue_loader_lib_template_compiler_index_id_data_v_6cd60c96_hasScoped_false_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_bustCache_downLoad_vue__ = __webpack_require__(16);
+var disposed = false
+function injectStyle (ssrContext) {
+  if (disposed) return
+  __webpack_require__(13)
+}
+var normalizeComponent = __webpack_require__(2)
+/* script */
+var __vue_script__ = null
+/* template */
+
+/* template functional */
+  var __vue_template_functional__ = false
+/* styles */
+var __vue_styles__ = injectStyle
+/* scopeId */
+var __vue_scopeId__ = null
+/* moduleIdentifier (server only) */
+var __vue_module_identifier__ = null
+var Component = normalizeComponent(
+  __vue_script__,
+  __WEBPACK_IMPORTED_MODULE_0__node_modules_vue_loader_lib_template_compiler_index_id_data_v_6cd60c96_hasScoped_false_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_bustCache_downLoad_vue__["a" /* default */],
+  __vue_template_functional__,
+  __vue_styles__,
+  __vue_scopeId__,
+  __vue_module_identifier__
+)
+Component.options.__file = "components\\lantao\\downLoad.vue"
+if (Component.esModule && Object.keys(Component.esModule).some(function (key) {  return key !== "default" && key.substr(0, 2) !== "__"})) {  console.error("named exports are not supported in *.vue files.")}
+
+/* hot reload */
+if (false) {(function () {
+  var hotAPI = require("vue-hot-reload-api")
+  hotAPI.install(require("vue"), false)
+  if (!hotAPI.compatible) return
+  module.hot.accept()
+  if (!module.hot.data) {
+    hotAPI.createRecord("data-v-6cd60c96", Component.options)
+  } else {
+    hotAPI.reload("data-v-6cd60c96", Component.options)
+  }
+  module.hot.dispose(function (data) {
+    disposed = true
+  })
+})()}
+
+/* harmony default export */ __webpack_exports__["default"] = (Component.exports);
+
+
+/***/ }),
+/* 5 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
-var _vue = __webpack_require__(2);
+var _vue = __webpack_require__(6);
 
 var _vue2 = _interopRequireDefault(_vue);
 
-var _jquery = __webpack_require__(4);
+var _jquery = __webpack_require__(8);
 
 var _jquery2 = _interopRequireDefault(_jquery);
 
-var _vueRouter = __webpack_require__(5);
+var _vueRouter = __webpack_require__(9);
 
 var _vueRouter2 = _interopRequireDefault(_vueRouter);
 
-var _vuex = __webpack_require__(6);
+var _vuex = __webpack_require__(10);
 
 var _vuex2 = _interopRequireDefault(_vuex);
 
-var _dbHome = __webpack_require__(7);
+var _cookie = __webpack_require__(11);
 
-var _dbHome2 = _interopRequireDefault(_dbHome);
+var _cookie2 = _interopRequireDefault(_cookie);
+
+__webpack_require__(12);
+
+var _downLoad = __webpack_require__(4);
+
+var _downLoad2 = _interopRequireDefault(_downLoad);
+
+var _dbMovie = __webpack_require__(17);
+
+var _dbMovie2 = _interopRequireDefault(_dbMovie);
+
+var _dbMovieDetail = __webpack_require__(22);
+
+var _dbMovieDetail2 = _interopRequireDefault(_dbMovieDetail);
+
+var _dbRadio = __webpack_require__(27);
+
+var _dbRadio2 = _interopRequireDefault(_dbRadio);
+
+var _dbSendRadio = __webpack_require__(32);
+
+var _dbSendRadio2 = _interopRequireDefault(_dbSendRadio);
+
+__webpack_require__(37);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
+window.$ = _jquery2.default;
 //必须要通过 Vue.use() 明确地安装路由功能
 _vue2.default.use(_vueRouter2.default);
 _vue2.default.use(_vuex2.default);
 
+window.C = _cookie2.default;
+// import dbHome from './components/lmm/dbHome.vue';
+
 //配置路由
 var router = new _vueRouter2.default({
     routes: [{
-        path: '/home',
-        component: _dbHome2.default
+        path: '/home/movie',
+        component: _dbMovie2.default
+    }, {
+        path: '/home/radio',
+        component: _dbRadio2.default
+    },, {
+        path: '/home/sendRadio',
+        component: _dbSendRadio2.default
+    }, {
+        path: '/home/movieDetail/:id',
+        component: _dbMovieDetail2.default
         // ,
         // children:[
         //     {
@@ -324,6 +825,7 @@ var router = new _vueRouter2.default({
         // }
     }]
 });
+window.router = router;
 
 //配置状态管理
 var store = new _vuex2.default.Store({
@@ -342,7 +844,7 @@ new _vue2.default({
 });
 
 /***/ }),
-/* 2 */
+/* 6 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* WEBPACK VAR INJECTION */(function(global) {/*!
@@ -10529,10 +11031,10 @@ return Vue$3;
 
 })));
 
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(3)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(7)))
 
 /***/ }),
-/* 3 */
+/* 7 */
 /***/ (function(module, exports) {
 
 var g;
@@ -10559,7 +11061,7 @@ module.exports = g;
 
 
 /***/ }),
-/* 4 */
+/* 8 */
 /***/ (function(module, exports, __webpack_require__) {
 
 var __WEBPACK_AMD_DEFINE_ARRAY__, __WEBPACK_AMD_DEFINE_RESULT__;/*!
@@ -20819,7 +21321,7 @@ return jQuery;
 
 
 /***/ }),
-/* 5 */
+/* 9 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -23330,10 +23832,10 @@ if (inBrowser && window.Vue) {
 
 /* harmony default export */ __webpack_exports__["default"] = (VueRouter);
 
-/* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(0)))
+/* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(3)))
 
 /***/ }),
-/* 6 */
+/* 10 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -24277,83 +24779,147 @@ var index_esm = {
 
 /* harmony default export */ __webpack_exports__["default"] = (index_esm);
 
-/* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(0)))
+/* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(3)))
 
 /***/ }),
-/* 7 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/* 11 */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbHome_vue__ = __webpack_require__(14);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbHome_vue___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbHome_vue__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_vue_loader_lib_template_compiler_index_id_data_v_3691de89_hasScoped_false_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_bustCache_dbHome_vue__ = __webpack_require__(15);
-var disposed = false
-function injectStyle (ssrContext) {
-  if (disposed) return
-  __webpack_require__(8)
-}
-var normalizeComponent = __webpack_require__(13)
-/* script */
 
-/* template */
 
-/* template functional */
-  var __vue_template_functional__ = false
-/* styles */
-var __vue_styles__ = injectStyle
-/* scopeId */
-var __vue_scopeId__ = null
-/* moduleIdentifier (server only) */
-var __vue_module_identifier__ = null
-var Component = normalizeComponent(
-  __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbHome_vue___default.a,
-  __WEBPACK_IMPORTED_MODULE_1__node_modules_vue_loader_lib_template_compiler_index_id_data_v_3691de89_hasScoped_false_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_bustCache_dbHome_vue__["a" /* default */],
-  __vue_template_functional__,
-  __vue_styles__,
-  __vue_scopeId__,
-  __vue_module_identifier__
-)
-Component.options.__file = "components\\lmm\\dbHome.vue"
-if (Component.esModule && Object.keys(Component.esModule).some(function (key) {  return key !== "default" && key.substr(0, 2) !== "__"})) {  console.error("named exports are not supported in *.vue files.")}
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+exports.default = {
+    /**
+     * [设置cookie]
+     * @param {String} name    [cookie名]
+     * @param {String} val     [cookie值]
+     * @param {[Date]} expires [有效期]
+     * @param {[String]} path    [cookie路径]
+     */
+    set: function set(name, val, expires, path) {
+        // document.cookie = 'cartlist=1234;expires=' + now
+        var cookieStr = name + '=' + val;
 
-/* hot reload */
-if (false) {(function () {
-  var hotAPI = require("vue-hot-reload-api")
-  hotAPI.install(require("vue"), false)
-  if (!hotAPI.compatible) return
-  module.hot.accept()
-  if (!module.hot.data) {
-    hotAPI.createRecord("data-v-3691de89", Component.options)
-  } else {
-    hotAPI.reload("data-v-3691de89", Component.options)
-' + '  }
-  module.hot.dispose(function (data) {
-    disposed = true
-  })
-})()}
+        // 有效期
+        if (expires) {
+            console.log(expires);
+            cookieStr += ';expires=' + expires.toUTCString();
+        }
 
-/* harmony default export */ __webpack_exports__["default"] = (Component.exports);
+        // 设置路径
+        if (path) {
+            cookieStr += ';path=' + path;
+        }
 
+        // 写入
+        document.cookie = cookieStr;
+    },
+    get: function get(name) {
+        // 先获取所有cookie
+        var cookie = document.cookie;
+        if (cookie.length === 0) {
+            return '';
+        }
+
+        // 拆分成数组
+        cookie = cookie.split('; ');
+
+        // 遍历cookie，找到想要的cookie值
+        var res = '';
+        cookie.forEach(function (item) {
+            var arr = item.split('=');
+
+            if (arr[0] === name) {
+                res = arr[1];
+            }
+        });
+
+        return res;
+    },
+    remove: function remove(name) {
+        // 利用设置过期时间达到删除的效果。
+        var now = new Date();
+        now.setDate(now.getDate() - 100);
+
+        // document.cookie = name +'=xxx;expires=' + now.toUTCString();
+        Cookie.set(name, null, now);
+    }
+};
 
 /***/ }),
-/* 8 */
+/* 12 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Date.prototype.format = function (fmt) {
+  var o = {
+    "M+": this.getMonth() + 1, //月份 
+    "d+": this.getDate(), //日 
+    "h+": this.getHours(), //小时 
+    "m+": this.getMinutes(), //分 
+    "s+": this.getSeconds(), //秒 
+    "q+": Math.floor((this.getMonth() + 3) / 3), //季度 
+    "S": this.getMilliseconds() //毫秒 
+  };
+  if (/(y+)/.test(fmt)) {
+    fmt = fmt.replace(RegExp.$1, (this.getFullYear() + "").substr(4 - RegExp.$1.length));
+  }
+  for (var k in o) {
+    if (new RegExp("(" + k + ")").test(fmt)) {
+      fmt = fmt.replace(RegExp.$1, RegExp.$1.length == 1 ? o[k] : ("00" + o[k]).substr(("" + o[k]).length));
+    }
+  }
+  return fmt;
+};
+// 组件间的通信 传bool值判断是否显示正在加载中
+// var store = new Vuex.Store({
+//     state:{
+//         isload:true,    //页面未加载时的load
+//         data:{},        //进入详情页需要传的数据，由于没有数据库
+//         isloadMore:false, //滚轮滑到底部的load
+//         scrollUp:true     //鼠标滚轮是否向上面滚
+//     },
+//     mutations:{
+//         setIsLoad:function(state,bool){
+//             state.isload = bool;
+//         },
+//         setTitle:function(state,content){
+//             state.data = content;
+//         }
+//     },
+//     actions:{
+//         set(context,data){
+//             context.commit('setIsLoad',data.bool);
+//         },
+//         setTitles(context,data){
+//             context.commit('setTitle',data);
+//         }
+//     }
+// })
+
+/***/ }),
+/* 13 */
 /***/ (function(module, exports, __webpack_require__) {
 
 // style-loader: Adds some css to the DOM by adding a <style> tag
 
 // load the styles
-var content = __webpack_require__(9);
+var content = __webpack_require__(14);
 if(typeof content === 'string') content = [[module.i, content, '']];
 if(content.locals) module.exports = content.locals;
 // add the styles to the DOM
-var update = __webpack_require__(11)("0cd59285", content, false);
+var update = __webpack_require__(1)("4ce778ac", content, false);
 // Hot Module Replacement
 if(false) {
  // When the styles change, update the <style> tags
  if(!content.locals) {
-   module.hot.accept("!!../../node_modules/css-loader/index.js!../../node_modules/vue-loader/lib/style-compiler/index.js?{\"vue\":true,\"id\":\"data-v-3691de89\",\"scoped\":false,\"hasInlineConfig\":false}!../../node_modules/vue-loader/lib/selector.js?type=styles&index=0&bustCache!./dbHome.vue", function() {
-     var newContent = require("!!../../node_modules/css-loader/index.js!../../node_modules/vue-loader/lib/style-compiler/index.js?{\"vue\":true,\"id\":\"data-v-3691de89\",\"scoped\":false,\"hasInlineConfig\":false}!../../node_modules/vue-loader/lib/selector.js?type=styles&index=0&bustCache!./dbHome.vue");
+   module.hot.accept("!!../../node_modules/css-loader/index.js?sourceMap!../../node_modules/vue-loader/lib/style-compiler/index.js?{\"vue\":true,\"id\":\"data-v-6cd60c96\",\"scoped\":false,\"hasInlineConfig\":false}!../../node_modules/vue-loader/lib/selector.js?type=styles&index=0&bustCache!./downLoad.vue", function() {
+     var newContent = require("!!../../node_modules/css-loader/index.js?sourceMap!../../node_modules/vue-loader/lib/style-compiler/index.js?{\"vue\":true,\"id\":\"data-v-6cd60c96\",\"scoped\":false,\"hasInlineConfig\":false}!../../node_modules/vue-loader/lib/selector.js?type=styles&index=0&bustCache!./downLoad.vue");
      if(typeof newContent === 'string') newContent = [[module.id, newContent, '']];
      update(newContent);
    });
@@ -24363,324 +24929,21 @@ if(false) {
 }
 
 /***/ }),
-/* 9 */
+/* 14 */
 /***/ (function(module, exports, __webpack_require__) {
 
-exports = module.exports = __webpack_require__(10)(undefined);
+exports = module.exports = __webpack_require__(0)(true);
 // imports
 
 
 // module
-exports.push([module.i, "\ndiv{\ncolor:red;\n}\n", ""]);
+exports.push([module.i, "\n.download-app {\n    padding: 0 0 20px 0;\n    margin-top: 50px;\n    margin-bottom: 30px;\n    text-align: center;\n    font-size: 15px;\n}\n.download-app .info {\n    margin: 0 auto 15px;\n    overflow: hidden;\n    text-align: left;\n    font-size: 14px;\n    display: inline-block;\n    color: #111;\n}\n.download-app .info img {\n    float: left;\n    margin-right: 12px;\n}\n.download-app .info-content {\n    overflow: hidden;\n}\n.download-app .info strong {\n    font-size: 24px;\n    font-weight: normal;\n    line-height: 28px;\n}\n.download-app .info .info-content div {\n    white-space: pre;\n    line-height: 20px;\n}\n.download-app .info+a {\n    display: block;\n}\n", "", {"version":3,"sources":["C:/Users/Administrator/Desktop/douban/douBanSix/components/lantao/components/lantao/downLoad.vue?5a6a421f"],"names":[],"mappings":";AAcA;IACA,oBAAA;IACA,iBAAA;IACA,oBAAA;IACA,mBAAA;IACA,gBAAA;CACA;AACA;IACA,oBAAA;IACA,iBAAA;IACA,iBAAA;IACA,gBAAA;IACA,sBAAA;IACA,YAAA;CACA;AACA;IACA,YAAA;IACA,mBAAA;CACA;AACA;IACA,iBAAA;CACA;AACA;IACA,gBAAA;IACA,oBAAA;IACA,kBAAA;CACA;AACA;IACA,iBAAA;IACA,kBAAA;CACA;AACA;IACA,eAAA;CACA","file":"downLoad.vue","sourcesContent":["<template>\n    <div class=\"download-app\">\n            <div class=\"info\">\n                <img src=\"https://img3.doubanio.com/f/talion/7837f29dd7deab9416274ae374a59bc17b5f33c6/pics/card/douban-app-logo.png\" width=\"48\">\n                <div class=\"info-content\">\n                    <strong>豆瓣</strong>\n                    <div>我们的精神角落</div>\n                </div>\n            </div>\n                <a href=\"https://www.douban.com/doubanapp/card/log?category=movie_home&amp;cid=&amp;action=click_download&amp;ref=http%3A//www.douban.com/doubanapp/app%3Fchannel%3Dcard_movie_home%26direct_dl%3D1\" rel=\"nofollow\">去 App Store 免费下载 iOS 客户端</a>\n        </div> \n</template>\n\n<style type=\"text/css\">\n.download-app {\n    padding: 0 0 20px 0;\n    margin-top: 50px;\n    margin-bottom: 30px;\n    text-align: center;\n    font-size: 15px;\n}\n.download-app .info {\n    margin: 0 auto 15px;\n    overflow: hidden;\n    text-align: left;\n    font-size: 14px;\n    display: inline-block;\n    color: #111;\n}\n.download-app .info img {\n    float: left;\n    margin-right: 12px;\n}\n.download-app .info-content {\n    overflow: hidden;\n}\n.download-app .info strong {\n    font-size: 24px;\n    font-weight: normal;\n    line-height: 28px;\n}\n.download-app .info .info-content div {\n    white-space: pre;\n    line-height: 20px;\n}\n.download-app .info+a {\n    display: block;\n}\n</style>"],"sourceRoot":""}]);
 
 // exports
 
 
 /***/ }),
-/* 10 */
-/***/ (function(module, exports) {
-
-/*
-	MIT License http://www.opensource.org/licenses/mit-license.php
-	Author Tobias Koppers @sokra
-*/
-// css base code, injected by the css-loader
-module.exports = function(useSourceMap) {
-	var list = [];
-
-	// return the list of modules as css string
-	list.toString = function toString() {
-		return this.map(function (item) {
-			var content = cssWithMappingToString(item, useSourceMap);
-			if(item[2]) {
-				return "@media " + item[2] + "{" + content + "}";
-			} else {
-				return content;
-			}
-		}).join("");
-	};
-
-	// import a list of modules into the list
-	list.i = function(modules, mediaQuery) {
-		if(typeof modules === "string")
-			modules = [[null, modules, ""]];
-		var alreadyImportedModules = {};
-		for(var i = 0; i < this.length; i++) {
-			var id = this[i][0];
-			if(typeof id === "number")
-				alreadyImportedModules[id] = true;
-		}
-		for(i = 0; i < modules.length; i++) {
-			var item = modules[i];
-			// skip already imported module
-			// this implementation is not 100% perfect for weird media query combinations
-			//  when a module is imported multiple times with different media queries.
-			//  I hope this will never occur (Hey this way we have smaller bundles)
-			if(typeof item[0] !== "number" || !alreadyImportedModules[item[0]]) {
-				if(mediaQuery && !item[2]) {
-					item[2] = mediaQuery;
-				} else if(mediaQuery) {
-					item[2] = "(" + item[2] + ") and (" + mediaQuery + ")";
-				}
-				list.push(item);
-			}
-		}
-	};
-	return list;
-};
-
-function cssWithMappingToString(item, useSourceMap) {
-	var content = item[1] || '';
-	var cssMapping = item[3];
-	if (!cssMapping) {
-		return content;
-	}
-
-	if (useSourceMap && typeof btoa === 'function') {
-		var sourceMapping = toComment(cssMapping);
-		var sourceURLs = cssMapping.sources.map(function (source) {
-			return '/*# sourceURL=' + cssMapping.sourceRoot + source + ' */'
-		});
-
-		return [content].concat(sourceURLs).concat([sourceMapping]).join('\n');
-	}
-
-	return [content].join('\n');
-}
-
-// Adapted from convert-source-map (MIT)
-function toComment(sourceMap) {
-	// eslint-disable-next-line no-undef
-	var base64 = btoa(unescape(encodeURIComponent(JSON.stringify(sourceMap))));
-	var data = 'sourceMappingURL=data:application/json;charset=utf-8;base64,' + base64;
-
-	return '/*# ' + data + ' */';
-}
-
-
-/***/ }),
-/* 11 */
-/***/ (function(module, exports, __webpack_require__) {
-
-/*
-  MIT License http://www.opensource.org/licenses/mit-license.php
-  Author Tobias Koppers @sokra
-  Modified by Evan You @yyx990803
-*/
-
-var hasDocument = typeof document !== 'undefined'
-
-if (typeof DEBUG !== 'undefined' && DEBUG) {
-  if (!hasDocument) {
-    throw new Error(
-    'vue-style-loader cannot be used in a non-browser environment. ' +
-    "Use { target: 'node' } in your Webpack config to indicate a server-rendering environment."
-  ) }
-}
-
-var listToStyles = __webpack_require__(12)
-
-/*
-type StyleObject = {
-  id: number;
-  parts: Array<StyleObjectPart>
-}
-
-type StyleObjectPart = {
-  css: string;
-  media: string;
-  sourceMap: ?string
-}
-*/
-
-var stylesInDom = {/*
-  [id: number]: {
-    id: number,
-    refs: number,
-    parts: Array<(obj?: StyleObjectPart) => void>
-  }
-*/}
-
-var head = hasDocument && (document.head || document.getElementsByTagName('head')[0])
-var singletonElement = null
-var singletonCounter = 0
-var isProduction = false
-var noop = function () {}
-
-// Force single-tag solution on IE6-9, which has a hard limit on the # of <style>
-// tags it will allow on a page
-var isOldIE = typeof navigator !== 'undefined' && /msie [6-9]\b/.test(navigator.userAgent.toLowerCase())
-
-module.exports = function (parentId, list, _isProduction) {
-  isProduction = _isProduction
-
-  var styles = listToStyles(parentId, list)
-  addStylesToDom(styles)
-
-  return function update (newList) {
-    var mayRemove = []
-    for (var i = 0; i < styles.length; i++) {
-      var item = styles[i]
-      var domStyle = stylesInDom[item.id]
-      domStyle.refs--
-      mayRemove.push(domStyle)
-    }
-    if (newList) {
-      styles = listToStyles(parentId, newList)
-      addStylesToDom(styles)
-    } else {
-      styles = []
-    }
-    for (var i = 0; i < mayRemove.length; i++) {
-      var domStyle = mayRemove[i]
-      if (domStyle.refs === 0) {
-        for (var j = 0; j < domStyle.parts.length; j++) {
-          domStyle.parts[j]()
-        }
-        delete stylesInDom[domStyle.id]
-      }
-    }
-  }
-}
-
-function addStylesToDom (styles /* Array<StyleObject> */) {
-  for (var i = 0; i < styles.length; i++) {
-    var item = styles[i]
-    var domStyle = stylesInDom[item.id]
-    if (domStyle) {
-      domStyle.refs++
-      for (var j = 0; j < domStyle.parts.length; j++) {
-        domStyle.parts[j](item.parts[j])
-      }
-      for (; j < item.parts.length; j++) {
-        domStyle.parts.push(addStyle(item.parts[j]))
-      }
-      if (domStyle.parts.length > item.parts.length) {
-        domStyle.parts.length = item.parts.length
-      }
-    } else {
-      var parts = []
-      for (var j = 0; j < item.parts.length; j++) {
-        parts.push(addStyle(item.parts[j]))
-      }
-      stylesInDom[item.id] = { id: item.id, refs: 1, parts: parts }
-    }
-  }
-}
-
-function createStyleElement () {
-  var styleElement = document.createElement('style')
-  styleElement.type = 'text/css'
-  head.appendChild(styleElement)
-  return styleElement
-}
-
-function addStyle (obj /* StyleObjectPart */) {
-  var update, remove
-  var styleElement = document.querySelector('style[data-vue-ssr-id~="' + obj.id + '"]')
-
-  if (styleElement) {
-    if (isProduction) {
-      // has SSR styles and in production mode.
-      // simply do nothing.
-      return noop
-    } else {
-      // has SSR styles but in dev mode.
-      // for some reason Chrome can't handle source map in server-rendered
-      // style tags - source maps in <style> only works if the style tag is
-      // created and inserted dynamically. So we remove the server rendered
-      // styles and inject new ones.
-      styleElement.parentNode.removeChild(styleElement)
-    }
-  }
-
-  if (isOldIE) {
-    // use singleton mode for IE9.
-    var styleIndex = singletonCounter++
-    styleElement = singletonElement || (singletonElement = createStyleElement())
-    update = applyToSingletonTag.bind(null, styleElement, styleIndex, false)
-    remove = applyToSingletonTag.bind(null, styleElement, styleIndex, true)
-  } else {
-    // use multi-style-tag mode in all other cases
-    styleElement = createStyleElement()
-    update = applyToTag.bind(null, styleElement)
-    remove = function () {
-      styleElement.parentNode.removeChild(styleElement)
-    }
-  }
-
-  update(obj)
-
-  return function updateStyle (newObj /* StyleObjectPart */) {
-    if (newObj) {
-      if (newObj.css === obj.css &&
-          newObj.media === obj.media &&
-          newObj.sourceMap === obj.sourceMap) {
-        return
-      }
-      update(obj = newObj)
-    } else {
-      remove()
-    }
-  }
-}
-
-var replaceText = (function () {
-  var textStore = []
-
-  return function (index, replacement) {
-    textStore[index] = replacement
-    return textStore.filter(Boolean).join('\n')
-  }
-})()
-
-function applyToSingletonTag (styleElement, index, remove, obj) {
-  var css = remove ? '' : obj.css
-
-  if (styleElement.styleSheet) {
-    styleElement.styleSheet.cssText = replaceText(index, css)
-  } else {
-    var cssNode = document.createTextNode(css)
-    var childNodes = styleElement.childNodes
-    if (childNodes[index]) styleElement.removeChild(childNodes[index])
-    if (childNodes.length) {
-      styleElement.insertBefore(cssNode, childNodes[index])
-    } else {
-      styleElement.appendChild(cssNode)
-    }
-  }
-}
-
-function applyToTag (styleElement, obj) {
-  var css = obj.css
-  var media = obj.media
-  var sourceMap = obj.sourceMap
-
-  if (media) {
-    styleElement.setAttribute('media', media)
-  }
-
-  if (sourceMap) {
-    // https://developer.chrome.com/devtools/docs/javascript-debugging
-    // this makes source maps inside style tags work properly in Chrome
-    css += '\n/*# sourceURL=' + sourceMap.sources[0] + ' */'
-    // http://stackoverflow.com/a/26603875
-    css += '\n/*# sourceMappingURL=data:application/json;base64,' + btoa(unescape(encodeURIComponent(JSON.stringify(sourceMap)))) + ' */'
-  }
-
-  if (styleElement.styleSheet) {
-    styleElement.styleSheet.cssText = css
-  } else {
-    while (styleElement.firstChild) {
-      styleElement.removeChild(styleElement.firstChild)
-    }
-    styleElement.appendChild(document.createTextNode(css))
-  }
-}
-
-
-/***/ }),
-/* 12 */
+/* 15 */
 /***/ (function(module, exports) {
 
 /**
@@ -24713,126 +24976,7 @@ module.exports = function listToStyles (parentId, list) {
 
 
 /***/ }),
-/* 13 */
-/***/ (function(module, exports) {
-
-/* globals __VUE_SSR_CONTEXT__ */
-
-// IMPORTANT: Do NOT use ES2015 features in this file.
-// This module is a runtime utility for cleaner component module output and will
-// be included in the final webpack user bundle.
-
-module.exports = function normalizeComponent (
-  rawScriptExports,
-  compiledTemplate,
-  functionalTemplate,
-  injectStyles,
-  scopeId,
-  moduleIdentifier /* server only */
-) {
-  var esModule
-  var scriptExports = rawScriptExports = rawScriptExports || {}
-
-  // ES6 modules interop
-  var type = typeof rawScriptExports.default
-  if (type === 'object' || type === 'function') {
-    esModule = rawScriptExports
-    scriptExports = rawScriptExports.default
-  }
-
-  // Vue.extend constructor export interop
-  var options = typeof scriptExports === 'function'
-    ? scriptExports.options
-    : scriptExports
-
-  // render functions
-  if (compiledTemplate) {
-    options.render = compiledTemplate.render
-    options.staticRenderFns = compiledTemplate.staticRenderFns
-    options._compiled = true
-  }
-
-  // functional template
-  if (functionalTemplate) {
-    options.functional = true
-  }
-
-  // scopedId
-  if (scopeId) {
-    options._scopeId = scopeId
-  }
-
-  var hook
-  if (moduleIdentifier) { // server build
-    hook = function (context) {
-      // 2.3 injection
-      context =
-        context || // cached call
-        (this.$vnode && this.$vnode.ssrContext) || // stateful
-        (this.parent && this.parent.$vnode && this.parent.$vnode.ssrContext) // functional
-      // 2.2 with runInNewContext: true
-      if (!context && typeof __VUE_SSR_CONTEXT__ !== 'undefined') {
-        context = __VUE_SSR_CONTEXT__
-      }
-      // inject component styles
-      if (injectStyles) {
-        injectStyles.call(this, context)
-      }
-      // register component module identifier for async chunk inferrence
-      if (context && context._registeredComponents) {
-        context._registeredComponents.add(moduleIdentifier)
-      }
-    }
-    // used by ssr in case component is cached and beforeCreate
-    // never gets called
-    options._ssrRegister = hook
-  } else if (injectStyles) {
-    hook = injectStyles
-  }
-
-  if (hook) {
-    var functional = options.functional
-    var existing = functional
-      ? options.render
-      : options.beforeCreate
-
-    if (!functional) {
-      // inject component registration as beforeCreate hook
-      options.beforeCreate = existing
-        ? [].concat(existing, hook)
-        : [hook]
-    } else {
-      // for template-only hot-reload because in that case the render fn doesn't
-      // go through the normalizer
-      options._injectStyles = hook
-      // register for functioal component in vue file
-      options.render = function renderWithStyleInjection (h, context) {
-        hook.call(context)
-        return existing(h, context)
-      }
-    }
-  }
-
-  return {
-    esModule: esModule,
-    exports: scriptExports,
-    options: options
-  }
-}
-
-
-/***/ }),
-/* 14 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-//
-//
-//
-
-
-/***/ }),
-/* 15 */
+/* 16 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -24840,7 +24984,2612 @@ var render = function() {
   var _vm = this
   var _h = _vm.$createElement
   var _c = _vm._self._c || _h
-  return _c("div", [_vm._v("豆瓣主页")])
+  return _vm._m(0)
+}
+var staticRenderFns = [
+  function() {
+    var _vm = this
+    var _h = _vm.$createElement
+    var _c = _vm._self._c || _h
+    return _c("div", { staticClass: "download-app" }, [
+      _c("div", { staticClass: "info" }, [
+        _c("img", {
+          attrs: {
+            src:
+              "https://img3.doubanio.com/f/talion/7837f29dd7deab9416274ae374a59bc17b5f33c6/pics/card/douban-app-logo.png",
+            width: "48"
+          }
+        }),
+        _vm._v(" "),
+        _c("div", { staticClass: "info-content" }, [
+          _c("strong", [_vm._v("豆瓣")]),
+          _vm._v(" "),
+          _c("div", [_vm._v("我们的精神角落")])
+        ])
+      ]),
+      _vm._v(" "),
+      _c(
+        "a",
+        {
+          attrs: {
+            href:
+              "https://www.douban.com/doubanapp/card/log?category=movie_home&cid=&action=click_download&ref=http%3A//www.douban.com/doubanapp/app%3Fchannel%3Dcard_movie_home%26direct_dl%3D1",
+            rel: "nofollow"
+          }
+        },
+        [_vm._v("去 App Store 免费下载 iOS 客户端")]
+      )
+    ])
+  }
+]
+render._withStripped = true
+var esExports = { render: render, staticRenderFns: staticRenderFns }
+/* harmony default export */ __webpack_exports__["a"] = (esExports);
+if (false) {
+  module.hot.accept()
+  if (module.hot.data) {
+    require("vue-hot-reload-api")      .rerender("data-v-6cd60c96", esExports)
+  }
+}
+
+/***/ }),
+/* 17 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbMovie_vue__ = __webpack_require__(20);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbMovie_vue___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbMovie_vue__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_vue_loader_lib_template_compiler_index_id_data_v_4ed459d5_hasScoped_true_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_bustCache_dbMovie_vue__ = __webpack_require__(21);
+var disposed = false
+function injectStyle (ssrContext) {
+  if (disposed) return
+  __webpack_require__(18)
+}
+var normalizeComponent = __webpack_require__(2)
+/* script */
+
+/* template */
+
+/* template functional */
+  var __vue_template_functional__ = false
+/* styles */
+var __vue_styles__ = injectStyle
+/* scopeId */
+var __vue_scopeId__ = "data-v-4ed459d5"
+/* moduleIdentifier (server only) */
+var __vue_module_identifier__ = null
+var Component = normalizeComponent(
+  __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbMovie_vue___default.a,
+  __WEBPACK_IMPORTED_MODULE_1__node_modules_vue_loader_lib_template_compiler_index_id_data_v_4ed459d5_hasScoped_true_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_bustCache_dbMovie_vue__["a" /* default */],
+  __vue_template_functional__,
+  __vue_styles__,
+  __vue_scopeId__,
+  __vue_module_identifier__
+)
+Component.options.__file = "components\\lantao\\dbMovie.vue"
+if (Component.esModule && Object.keys(Component.esModule).some(function (key) {  return key !== "default" && key.substr(0, 2) !== "__"})) {  console.error("named exports are not supported in *.vue files.")}
+
+/* hot reload */
+if (false) {(function () {
+  var hotAPI = require("vue-hot-reload-api")
+  hotAPI.install(require("vue"), false)
+  if (!hotAPI.compatible) return
+  module.hot.accept()
+  if (!module.hot.data) {
+    hotAPI.createRecord("data-v-4ed459d5", Component.options)
+  } else {
+    hotAPI.reload("data-v-4ed459d5", Component.options)
+  }
+  module.hot.dispose(function (data) {
+    disposed = true
+  })
+})()}
+
+/* harmony default export */ __webpack_exports__["default"] = (Component.exports);
+
+
+/***/ }),
+/* 18 */
+/***/ (function(module, exports, __webpack_require__) {
+
+// style-loader: Adds some css to the DOM by adding a <style> tag
+
+// load the styles
+var content = __webpack_require__(19);
+if(typeof content === 'string') content = [[module.i, content, '']];
+if(content.locals) module.exports = content.locals;
+// add the styles to the DOM
+var update = __webpack_require__(1)("79a5f11c", content, false);
+// Hot Module Replacement
+if(false) {
+ // When the styles change, update the <style> tags
+ if(!content.locals) {
+   module.hot.accept("!!../../node_modules/css-loader/index.js?sourceMap!../../node_modules/vue-loader/lib/style-compiler/index.js?{\"vue\":true,\"id\":\"data-v-4ed459d5\",\"scoped\":true,\"hasInlineConfig\":false}!../../node_modules/vue-loader/lib/selector.js?type=styles&index=0&bustCache!./dbMovie.vue", function() {
+     var newContent = require("!!../../node_modules/css-loader/index.js?sourceMap!../../node_modules/vue-loader/lib/style-compiler/index.js?{\"vue\":true,\"id\":\"data-v-4ed459d5\",\"scoped\":true,\"hasInlineConfig\":false}!../../node_modules/vue-loader/lib/selector.js?type=styles&index=0&bustCache!./dbMovie.vue");
+     if(typeof newContent === 'string') newContent = [[module.id, newContent, '']];
+     update(newContent);
+   });
+ }
+ // When the module is disposed, remove the <style> tags
+ module.hot.dispose(function() { update(); });
+}
+
+/***/ }),
+/* 19 */
+/***/ (function(module, exports, __webpack_require__) {
+
+exports = module.exports = __webpack_require__(0)(true);
+// imports
+
+
+// module
+exports.push([module.i, "\n.page[data-v-4ed459d5] {\n    padding-top: 47px;\n    max-width: 650px;\n    background: #fff;\n    margin: 0 auto;\n    overflow-x: hidden;\n    font-size: 12px;\n}\n.card[data-v-4ed459d5] {\n    margin: 0;\n}\nsection[data-v-4ed459d5]:first-child {\n    padding-top: 10px;\n}\nsection[data-v-4ed459d5] {\n    margin: 0;\n    overflow: hidden;\n    background-color: #fff;\n}\nsection header[data-v-4ed459d5] {\n    padding: 0 1.12rem;\n}\nsection h2[data-v-4ed459d5] {\n    display: inline-block;\n    min-width: 4em;\n    margin-bottom: 0;\n    color: #111;\n    padding-left: 0;\n    padding-bottom: 0;\n    font-size: 1.06rem;\n    margin: 0 0 15px;\n}\na[data-v-4ed459d5] {\n    color: #42bd56;\n    text-decoration: none;\n}\nsection .section-content[data-v-4ed459d5] {\n    margin-bottom: -1.12rem;\n}\n.row[data-v-4ed459d5] {\n    border-bottom: 1px solid #F2F2F2;\n    padding: 15px 0 43px 0;\n}\n.items[data-v-4ed459d5] {\n    font-size: 0;\n    white-space: nowrap;\n    overflow-x: auto;\n}\n.item[data-v-4ed459d5] {\n    display: inline-block;\n    vertical-align: top;\n    width: 100px;\n    text-align: center;\n    margin-left: 0.48rem;\n}\n.item a[data-v-4ed459d5] {\n    color: #111;\n    display:block;\n}\n.item[data-v-4ed459d5]:first-child {\n    margin-left: 1.12rem;\n}\n.item-poster[data-v-4ed459d5] {\n    width: 100%;\n    display:block;\n    overflow: hidden;\n    background-size: cover;\n    background-position: center;\n}\n.items>*[data-v-4ed459d5] {\n    font-size: .94rem;\n    white-space: normal;\n}\n.item__movie .item-title[data-v-4ed459d5] {\n    max-width: 100%;\n    word-wrap: normal;\n}\n.item-title[data-v-4ed459d5] {\n    display: block;\n    margin-top: .6rem;\n    line-height: .94rem;\n}\n.item:not(.item__celebrity) .item-title[data-v-4ed459d5] {\n    overflow: hidden;\n    white-space: nowrap;\n    text-overflow: ellipsis;\n}\n.item-poster[data-v-4ed459d5]:before {\n    content: \"\";\n    float: left;\n    margin-top: 142.85714%;\n}\n.item-rating[data-v-4ed459d5] {\n    color: #aaa;\n    line-height: .94rem;\n    margin-top: .3rem;\n    font-size: .72rem;\n}\nsection header a[data-v-4ed459d5] {\n    float: right;\n    font-size: .9rem;\n    line-height: 1.5rem;\n}\n.interests a[data-v-4ed459d5] {\n    height: 50px;\n    line-height: 50px;\n    padding: 0 1.55rem;\n    letter-spacing: .1em;\n    overflow: auto;\n    display: block;\n    text-align: center;\n}\n.clearfix[data-v-4ed459d5]:after, .card section>header[data-v-4ed459d5]:after {\n    content: '';\n    clear: both;\n    display: block;\n}\n.interests li[data-v-4ed459d5] {\n    margin: 0 0 8px 8px;\n    font-size: .94rem;\n    display: inline-block;\n    border-radius: .25rem;\n    border: solid 1px;\n    vertical-align: middle;\n    border-color: #CC3344;\n}\n.interests ul[data-v-4ed459d5] {\n    white-space: nowrap;\n    overflow-x: auto;\n    padding: 15px 15px 43px 15px;\n    font-size: 0;\n    margin-left: -5px;\n}\n.interests li.line[data-v-4ed459d5] {\n    width: 100%;\n    display: block;\n    height: 1px;\n    border: 0;\n    margin: 0;\n}\n.types .section-content[data-v-4ed459d5] {\n    margin-bottom: 0;\n}\n.types .section-content[data-v-4ed459d5] {\n    margin-left: .94rem;\n}\n.type-list[data-v-4ed459d5] {\n    padding: 1.12rem 0 1.88rem;\n    color: #eee;\n    font-size: .9rem;\n    overflow: hidden;\n}\n.type-list a[data-v-4ed459d5] {\n    float: left;\n    display: inline-block;\n    width: 100%;\n    line-height: 2.64rem;\n}\n.type-list li[data-v-4ed459d5] {\n    border-top: solid 1px #eee;\n    border-right: solid 1px #eee;\n    float: left;\n    padding-right: 1.12rem;\n    height: 2.64rem;\n}\n@media (max-width: 399px) and (min-width: 360px){\n.type-list li[data-v-4ed459d5] {\n        width: 40.5%;\n}\n}\n.type-list li[data-v-4ed459d5]:nth-child(even) {\n    border-right: none;\n    padding-left: 1.12rem;\n}\n.type-list span[data-v-4ed459d5] {\n    color: #ccc;\n    float: right;\n    font-weight: bold;\n    display: inline-block;\n    border-right: solid 1px #ccc;\n    border-bottom: solid 1px #ccc;\n    width: .5rem;\n    height: .5rem;\n    transform: rotate(-45deg);\n    margin-top: 1rem;\n}\n.rate[data-v-4ed459d5]{\n    display:block;\n    float:left;\n    width: 55px;\n    height: 11px;\n    margin-left: 10px;\n    margin-top: 1px;\n}\n.rate1[data-v-4ed459d5]{\n    background-position: 0 99px;\n}\n.rate2[data-v-4ed459d5]{\n    background-position: 0 0;\n}\n.rate3[data-v-4ed459d5]{\n    background-position: 0 -165px;\n}\n.rate4[data-v-4ed459d5]{\n    background-position: 0 55px;\n}\n.rate5[data-v-4ed459d5]{\n    background-position: 0 33px;\n}\n", "", {"version":3,"sources":["C:/Users/Administrator/Desktop/douban/douBanSix/components/lantao/components/lantao/dbMovie.vue?916d51ca"],"names":[],"mappings":";AAgRA;IACA,kBAAA;IACA,iBAAA;IACA,iBAAA;IACA,eAAA;IACA,mBAAA;IACA,gBAAA;CACA;AACA;IACA,UAAA;CACA;AACA;IACA,kBAAA;CACA;AACA;IACA,UAAA;IACA,iBAAA;IACA,uBAAA;CACA;AACA;IACA,mBAAA;CACA;AACA;IACA,sBAAA;IACA,eAAA;IACA,iBAAA;IACA,YAAA;IACA,gBAAA;IACA,kBAAA;IACA,mBAAA;IACA,iBAAA;CACA;AACA;IACA,eAAA;IACA,sBAAA;CACA;AACA;IACA,wBAAA;CACA;AACA;IACA,iCAAA;IACA,uBAAA;CACA;AACA;IACA,aAAA;IACA,oBAAA;IACA,iBAAA;CACA;AACA;IACA,sBAAA;IACA,oBAAA;IACA,aAAA;IACA,mBAAA;IACA,qBAAA;CACA;AACA;IACA,YAAA;IACA,cAAA;CACA;AACA;IACA,qBAAA;CACA;AACA;IACA,YAAA;IACA,cAAA;IACA,iBAAA;IACA,uBAAA;IACA,4BAAA;CACA;AACA;IACA,kBAAA;IACA,oBAAA;CACA;AACA;IACA,gBAAA;IACA,kBAAA;CACA;AACA;IACA,eAAA;IACA,kBAAA;IACA,oBAAA;CACA;AACA;IACA,iBAAA;IACA,oBAAA;IACA,wBAAA;CACA;AACA;IACA,YAAA;IACA,YAAA;IACA,uBAAA;CACA;AACA;IACA,YAAA;IACA,oBAAA;IACA,kBAAA;IACA,kBAAA;CACA;AACA;IACA,aAAA;IACA,iBAAA;IACA,oBAAA;CACA;AACA;IACA,aAAA;IACA,kBAAA;IACA,mBAAA;IACA,qBAAA;IACA,eAAA;IACA,eAAA;IACA,mBAAA;CACA;AACA;IACA,YAAA;IACA,YAAA;IACA,eAAA;CACA;AACA;IACA,oBAAA;IACA,kBAAA;IACA,sBAAA;IACA,sBAAA;IACA,kBAAA;IACA,uBAAA;IACA,sBAAA;CACA;AACA;IACA,oBAAA;IACA,iBAAA;IACA,6BAAA;IACA,aAAA;IACA,kBAAA;CACA;AACA;IACA,YAAA;IACA,eAAA;IACA,YAAA;IACA,UAAA;IACA,UAAA;CACA;AACA;IACA,iBAAA;CACA;AACA;IACA,oBAAA;CACA;AACA;IACA,2BAAA;IACA,YAAA;IACA,iBAAA;IACA,iBAAA;CACA;AACA;IACA,YAAA;IACA,sBAAA;IACA,YAAA;IACA,qBAAA;CACA;AACA;IACA,2BAAA;IACA,6BAAA;IACA,YAAA;IACA,uBAAA;IACA,gBAAA;CACA;AACA;AACA;QACA,aAAA;CACA;CACA;AACA;IACA,mBAAA;IACA,sBAAA;CACA;AACA;IACA,YAAA;IACA,aAAA;IACA,kBAAA;IACA,sBAAA;IACA,6BAAA;IACA,8BAAA;IACA,aAAA;IACA,cAAA;IACA,0BAAA;IACA,iBAAA;CACA;AACA;IACA,cAAA;IACA,WAAA;IACA,YAAA;IACA,aAAA;IACA,kBAAA;IACA,gBAAA;CACA;AACA;IACA,4BAAA;CACA;AACA;IACA,yBAAA;CACA;AACA;IACA,8BAAA;CACA;AACA;IACA,4BAAA;CACA;AACA;IACA,4BAAA;CACA","file":"dbMovie.vue","sourcesContent":["<template>\r\n    <div class=\"dbMovie\">\r\n        <div>\r\n            <div class=\"page\">\r\n                <div class=\"card\">\r\n                    <section id=\"movie_showing\">\r\n                        <header>\r\n                            <h2>{{name1}}</h2>\r\n                            <a href=\"/movie/nowintheater?loc_id=108288\">更多</a>\r\n                        </header>\r\n                        <div class=\"section-content\">\r\n                            <ul class=\"row items\">\r\n                                <li class=\"item item__movie\" v-for=\"i in item1\"  >\r\n                                    <a :href=\"'#home/movieDetail/' + i.id\">\r\n                                    <div class=\"item-poster\" :style=\"'background-image:url(' + i.cover.url + ')'\"></div>\r\n                                    <span class=\"item-title\">{{i.title}}</span>\r\n                                        <div class=\"item-rating\">\r\n                                            <div class=\"rank\">\r\n                                            <div v-if=\"i.rating\">\r\n                                                <span class=\"rate rate1\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==4\"></span>\r\n                                                <span class=\"rate rate2\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==5\"></span>\r\n                                                <span class=\"rate rate3\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==3\"></span>\r\n                                                <span class=\"rate rate4\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==2\"></span>\r\n                                                <span class=\"rate rate5\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==1\"></span>\r\n                                            </div>\r\n                                                <span v-if=\"i.rating\">{{i.rating.value}}</span>\r\n                                                <span v-if=\"!i.rating\">暂无评分</span>\r\n                                                </div>\r\n                                            </div>\r\n                                        </a>\r\n                                </li>\r\n                            </ul>\r\n                        </div>\r\n                    </section>\r\n                    <section id=\"movie_free_stream\">\r\n                        <header>\r\n                            <h2>{{name2}}</h2>\r\n                            <a href=\"/movie/nowintheater?loc_id=108288\">更多</a>\r\n                        </header>\r\n                        <div class=\"section-content\">\r\n                            <ul class=\"row items\">\r\n                                <li class=\"item item__movie\" v-for=\"i in item2\" :id=\"i.id\">\r\n                                    <a href=\"/movie/subject/27038183?refer=home\" :href=\"'#home/movieDetail/' + i.id\">\r\n                                    <div class=\"item-poster\" :style=\"'background-image: url(' +i.cover.url+ ')'\"></div>\r\n                                    <span class=\"item-title\">{{i.title}}</span>\r\n                                        <div class=\"item-rating\">\r\n                                            <div class=\"rank\">\r\n                                                <div v-if=\"i.rating\">\r\n                                                <span class=\"rate rate1\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==4\"></span>\r\n                                                <span class=\"rate rate2\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==5\"></span>\r\n                                                <span class=\"rate rate3\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==3\"></span>\r\n                                                <span class=\"rate rate4\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==2\"></span>\r\n                                                <span class=\"rate rate5\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==1\"></span>\r\n                                            </div>\r\n                                                <span v-if=\"i.rating\">{{i.rating.value}}</span>\r\n                                                <span v-if=\"!i.rating\">暂无评分</span>\r\n                                                </div>\r\n                                            </div>\r\n                                        </a>\r\n                                </li>\r\n                            </ul>\r\n                        </div>\r\n                    </section>\r\n                    <section id=\"movie_latest\">\r\n                        <header>\r\n                            <h2>{{name3}}</h2>\r\n                            <a href=\"/movie/nowintheater?loc_id=108288\">更多</a>\r\n                        </header>\r\n                        <div class=\"section-content\">\r\n                            <ul class=\"row items\">\r\n                                <li class=\"item item__movie\" v-for=\"i in item3\" :id=\"i.id\">\r\n                                    <a :href=\"'#home/movieDetail/' + i.id\">\r\n                                    <div class=\"item-poster\" :style=\"'background-image: url('+i.cover.url+')'\"></div>\r\n                                    <span class=\"item-title\">{{i.title}}</span>\r\n                                        <div class=\"item-rating\">\r\n                                            <div class=\"rank\">\r\n                                                <div v-if=\"i.rating\">\r\n                                                <span class=\"rate rate1\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==4\"></span>\r\n                                                <span class=\"rate rate2\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==5\"></span>\r\n                                                <span class=\"rate rate3\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==3\"></span>\r\n                                                <span class=\"rate rate4\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==2\"></span>\r\n                                                <span class=\"rate rate5\" :style=\"'background-image:url(./star/ic_rating_s.png)'\" v-if=\"Math.ceil(i.rating.value/2)==1\"></span>\r\n                                            </div>\r\n                                                <span v-if=\"i.rating\">{{i.rating.value}}</span>\r\n                                                <span v-if=\"!i.rating\">暂无评分</span>\r\n                                                </div>\r\n                                            </div>\r\n                                        </a>\r\n                                </li>\r\n                            </ul>\r\n                        </div>\r\n                    </section>\r\n                    <section class=\"interests\">\r\n                        <header>\r\n                            <h2>发现好电影</h2>\r\n                        </header>\r\n                        <div class=\"section-content\">\r\n                            <ul>\r\n                                  <li style=\"border-color: #CC3344;\"><a href=\"https://m.douban.com/doulist/968362/\" style=\"color: #CC3344;\">同时入选IMDB250和豆瓣电影250的电影</a></li>\r\n                                  \r\n                                  \r\n                                  <li style=\"border-color: #42BD56;\"><a href=\"https://m.douban.com/doulist/16002/\" style=\"color: #42BD56;\">带你进入不正常的世界</a></li>\r\n                                  \r\n                                  \r\n                                  <li style=\"border-color: #2384E8;\"><a href=\"https://m.douban.com/doulist/190343/\" style=\"color: #2384E8;\">用电【影】来祭奠逝去的岁月</a></li>\r\n                                  \r\n                                  \r\n                                  <li style=\"border-color: #3BA94D;\"><a href=\"https://m.douban.com/doulist/1125971/\" style=\"color: #3BA94D;\">女孩们的故事【电影】</a></li>\r\n                                  \r\n                                  \r\n                                    <li class=\"line\"></li>\r\n                                  <li style=\"border-color: #FF4055;\"><a href=\"https://m.douban.com/doulist/4253902/\" style=\"color: #FF4055;\">科幻是未来的钥匙——科幻启示录【科幻题材】</a></li>\r\n                                  \r\n                                  \r\n                                  <li style=\"border-color: #4F9DED;\"><a href=\"https://m.douban.com/doulist/121326/\" style=\"color: #4F9DED;\">美国生活面面观</a></li>\r\n                                  \r\n                                  \r\n                                  <li style=\"border-color: #FFAC2D;\"><a href=\"https://m.douban.com/doulist/37479562/\" style=\"color: #FFAC2D;\">2015终极期待</a></li>\r\n                                  \r\n                                  \r\n                                  <li style=\"border-color: #FFC46C;\"><a href=\"https://m.douban.com/doulist/458087/\" style=\"color: #FFC46C;\">经典韩国电影——收集100部</a></li>\r\n                                  \r\n                              </ul>\r\n                        </div>\r\n                    </section>\r\n        \r\n                    <section class=\"types\">\r\n                        <header>\r\n                            <h2>分类浏览</h2>\r\n                        </header>\r\n                        <div class=\"section-content\">\r\n                          \r\n                                <a name=\"cate\"></a>\r\n                                <ul class=\"type-list\">\r\n                                    <li><a href=\"/movie/classic\">经典<span></span></a></li>\r\n                                    <li><a href=\"/movie/underrated\">冷门佳片<span></span></a></li>\r\n                                    <li><a href=\"/movie/doubantop\">豆瓣高分<span></span></a></li>\r\n                                    <li><a href=\"/movie/action\">动作<span></span></a></li>\r\n                                    <li><a href=\"/movie/comedy\">喜剧<span></span></a></li>\r\n                                    <li><a href=\"/movie/love\">爱情<span></span></a></li>\r\n                                    <li><a href=\"/movie/mystery\">悬疑<span></span></a></li>\r\n                                    <li><a href=\"/movie/horror\">恐怖<span></span></a></li>\r\n                                    <li><a href=\"/movie/scifi\">科幻<span></span></a></li>\r\n                                    <li><a href=\"/movie/sweet\">治愈<span></span></a></li>\r\n                                    <li><a href=\"/movie/artfilm\">文艺<span></span></a></li>\r\n                                    <li><a href=\"/movie/youth\">成长<span></span></a></li>\r\n                                    <li><a href=\"/movie/animation\">动画<span></span></a></li>\r\n                                    <li><a href=\"/movie/chinese\">华语<span></span></a></li>\r\n                                    <li><a href=\"/movie/western\">欧美<span></span></a></li>\r\n                                    <li><a href=\"/movie/korean\">韩国<span></span></a></li>\r\n                                    <li><a href=\"/movie/japanese\">日本<span></span></a></li>\r\n\r\n                                    <li></li>\r\n                                </ul>\r\n                            \r\n                        </div>\r\n                    </section>\r\n                </div>\r\n            </div>\r\n            <download></download>\r\n        </div>\r\n        <!-- <router-view></router-view> -->\r\n       \r\n    </div>\r\n    \r\n</template>\r\n<script>\r\nimport download from \"./downLoad.vue\";\r\n    export default {\r\n        data(){\r\n            return {\r\n                name1:'',\r\n                name2:'',\r\n                name3:'',\r\n                item1:[],\r\n                item2:[],\r\n                item3:[],\r\n                interests:[{\r\n                    border_color:'#CC3344',\r\n                    url:'https://m.douban.com/doulist/968362/',\r\n                    content:'同时入选IMDB250和豆瓣电影250的电影'\r\n                },{\r\n                    border_color:'#42BD56',\r\n                    url:'https://m.douban.com/doulist/16002/',\r\n                    content:'带你进入不正常的世界'\r\n                },{\r\n                    border_color:'#2384E8;',\r\n                    url:'https://m.douban.com/doulist/190343/',\r\n                    content:'用电【影】来祭奠逝去的岁月'\r\n                },{\r\n                    border_color:'#3BA94D',\r\n                    url:'https://m.douban.com/doulist/16002/',\r\n                    content:'女孩们的故事【电影】'\r\n                },{\r\n                    border_color:'#FF4055',\r\n                    url:'https://m.douban.com/doulist/16002/',\r\n                    content:'科幻是未来的钥匙——科幻启示录【科幻题材】'\r\n                },{\r\n                    border_color:'#42BD56',\r\n                    url:'https://m.douban.com/doulist/16002/',\r\n                    content:'带你进入不正常的世界'\r\n                },{\r\n                    border_color:'#FFC46C',\r\n                    url:'https://m.douban.com/doulist/458087/',\r\n                    content:'经典韩国电影——收集100部'\r\n                }]\r\n\r\n            }\r\n        },\r\n        methods:{\r\n            load1:function(){\r\n                var self = this;\r\n                $.ajax({\r\n                    type:'get',\r\n                    url:'https://m.douban.com/rexxar/api/v2/subject_collection/movie_showing/items?os=ios&start=0&count=8&loc_id=108288&_=1507862799504',\r\n                    dataType:'jsonp',\r\n                    success:function(data){\r\n                        self.name1 = data.subject_collection.name;\r\n                        self.item1 = data.subject_collection_items;\r\n                        console.log(data);\r\n                        console.log(self.item1[0].rating.value);\r\n                    }\r\n                })\r\n            },\r\n            load2:function(){\r\n                var self = this;\r\n                $.ajax({\r\n                    type:'get',\r\n                    url:'https://m.douban.com/rexxar/api/v2/subject_collection/movie_free_stream/items?os=ios&start=0&count=8&loc_id=108288&_=1507862799506',\r\n                    dataType:'jsonp',\r\n                    success:function(data){\r\n                        self.name2 = data.subject_collection.name;\r\n                        self.item2 = data.subject_collection_items;\r\n\r\n                        console.log(self.name2);\r\n                    }\r\n                })\r\n            },\r\n            load3:function(){\r\n                var self = this;\r\n                $.ajax({\r\n                    type:'get',\r\n                    url:'https://m.douban.com/rexxar/api/v2/subject_collection/movie_latest/items?os=ios&start=0&count=8&loc_id=108288&_=1507862799513',\r\n                    dataType:'jsonp',\r\n                    success:function(data){\r\n                        self.name3 = data.subject_collection.name;\r\n                        console.log(self.name3);\r\n                        self.item3 = data.subject_collection_items;\r\n\r\n                    }\r\n                })\r\n            }\r\n        },\r\n        mounted:function(data){\r\n            this.load1();\r\n            this.load2();\r\n            this.load3();\r\n\r\n\r\n        },\r\n        computed:{\r\n            s(){\r\n            }\r\n\r\n        },\r\n        components:{\r\n            'download':download\r\n        }\r\n\r\n    }\r\n</script>\r\n<style scoped>\r\n    .page {\r\n    padding-top: 47px;\r\n    max-width: 650px;\r\n    background: #fff;\r\n    margin: 0 auto;\r\n    overflow-x: hidden;\r\n    font-size: 12px;\r\n}\r\n.card {\r\n    margin: 0;\r\n}\r\nsection:first-child {\r\n    padding-top: 10px;\r\n}\r\nsection {\r\n    margin: 0;\r\n    overflow: hidden;\r\n    background-color: #fff;\r\n}\r\nsection header {\r\n    padding: 0 1.12rem;\r\n}\r\nsection h2 {\r\n    display: inline-block;\r\n    min-width: 4em;\r\n    margin-bottom: 0;\r\n    color: #111;\r\n    padding-left: 0;\r\n    padding-bottom: 0;\r\n    font-size: 1.06rem;\r\n    margin: 0 0 15px;\r\n}\r\na {\r\n    color: #42bd56;\r\n    text-decoration: none;\r\n}\r\nsection .section-content {\r\n    margin-bottom: -1.12rem;\r\n}\r\n.row {\r\n    border-bottom: 1px solid #F2F2F2;\r\n    padding: 15px 0 43px 0;\r\n}\r\n.items {\r\n    font-size: 0;\r\n    white-space: nowrap;\r\n    overflow-x: auto;\r\n}\r\n.item {\r\n    display: inline-block;\r\n    vertical-align: top;\r\n    width: 100px;\r\n    text-align: center;\r\n    margin-left: 0.48rem;\r\n}\r\n.item a {\r\n    color: #111;\r\n    display:block;\r\n}\r\n.item:first-child {\r\n    margin-left: 1.12rem;\r\n}\r\n.item-poster {\r\n    width: 100%;\r\n    display:block;\r\n    overflow: hidden;\r\n    background-size: cover;\r\n    background-position: center;\r\n}\r\n.items>* {\r\n    font-size: .94rem;\r\n    white-space: normal;\r\n}\r\n.item__movie .item-title {\r\n    max-width: 100%;\r\n    word-wrap: normal;\r\n}\r\n.item-title {\r\n    display: block;\r\n    margin-top: .6rem;\r\n    line-height: .94rem;\r\n}\r\n.item:not(.item__celebrity) .item-title {\r\n    overflow: hidden;\r\n    white-space: nowrap;\r\n    text-overflow: ellipsis;\r\n}\r\n.item-poster:before {\r\n    content: \"\";\r\n    float: left;\r\n    margin-top: 142.85714%;\r\n}\r\n.item-rating {\r\n    color: #aaa;\r\n    line-height: .94rem;\r\n    margin-top: .3rem;\r\n    font-size: .72rem;\r\n}\r\nsection header a {\r\n    float: right;\r\n    font-size: .9rem;\r\n    line-height: 1.5rem;\r\n}\r\n.interests a {\r\n    height: 50px;\r\n    line-height: 50px;\r\n    padding: 0 1.55rem;\r\n    letter-spacing: .1em;\r\n    overflow: auto;\r\n    display: block;\r\n    text-align: center;\r\n}\r\n.clearfix:after, .card section>header:after {\r\n    content: '';\r\n    clear: both;\r\n    display: block;\r\n}\r\n.interests li {\r\n    margin: 0 0 8px 8px;\r\n    font-size: .94rem;\r\n    display: inline-block;\r\n    border-radius: .25rem;\r\n    border: solid 1px;\r\n    vertical-align: middle;\r\n    border-color: #CC3344;\r\n}\r\n.interests ul {\r\n    white-space: nowrap;\r\n    overflow-x: auto;\r\n    padding: 15px 15px 43px 15px;\r\n    font-size: 0;\r\n    margin-left: -5px;\r\n}\r\n.interests li.line {\r\n    width: 100%;\r\n    display: block;\r\n    height: 1px;\r\n    border: 0;\r\n    margin: 0;\r\n}\r\n.types .section-content {\r\n    margin-bottom: 0;\r\n}\r\n.types .section-content {\r\n    margin-left: .94rem;\r\n}\r\n.type-list {\r\n    padding: 1.12rem 0 1.88rem;\r\n    color: #eee;\r\n    font-size: .9rem;\r\n    overflow: hidden;\r\n}\r\n.type-list a {\r\n    float: left;\r\n    display: inline-block;\r\n    width: 100%;\r\n    line-height: 2.64rem;\r\n}\r\n.type-list li {\r\n    border-top: solid 1px #eee;\r\n    border-right: solid 1px #eee;\r\n    float: left;\r\n    padding-right: 1.12rem;\r\n    height: 2.64rem;\r\n}\r\n@media (max-width: 399px) and (min-width: 360px){\r\n    .type-list li {\r\n        width: 40.5%;\r\n    }\r\n}\r\n.type-list li:nth-child(even) {\r\n    border-right: none;\r\n    padding-left: 1.12rem;\r\n}\r\n.type-list span {\r\n    color: #ccc;\r\n    float: right;\r\n    font-weight: bold;\r\n    display: inline-block;\r\n    border-right: solid 1px #ccc;\r\n    border-bottom: solid 1px #ccc;\r\n    width: .5rem;\r\n    height: .5rem;\r\n    transform: rotate(-45deg);\r\n    margin-top: 1rem;\r\n}\r\n.rate{\r\n    display:block;\r\n    float:left;\r\n    width: 55px;\r\n    height: 11px;\r\n    margin-left: 10px;\r\n    margin-top: 1px;\r\n}\r\n.rate1{\r\n    background-position: 0 99px;\r\n}\r\n.rate2{\r\n    background-position: 0 0;\r\n}\r\n.rate3{\r\n    background-position: 0 -165px;\r\n}\r\n.rate4{\r\n    background-position: 0 55px;\r\n}\r\n.rate5{\r\n    background-position: 0 33px;\r\n}\r\n</style>"],"sourceRoot":""}]);
+
+// exports
+
+
+/***/ }),
+/* 20 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+
+var _downLoad = __webpack_require__(4);
+
+var _downLoad2 = _interopRequireDefault(_downLoad);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+exports.default = {
+    data: function data() {
+        return {
+            name1: '',
+            name2: '',
+            name3: '',
+            item1: [],
+            item2: [],
+            item3: [],
+            interests: [{
+                border_color: '#CC3344',
+                url: 'https://m.douban.com/doulist/968362/',
+                content: '同时入选IMDB250和豆瓣电影250的电影'
+            }, {
+                border_color: '#42BD56',
+                url: 'https://m.douban.com/doulist/16002/',
+                content: '带你进入不正常的世界'
+            }, {
+                border_color: '#2384E8;',
+                url: 'https://m.douban.com/doulist/190343/',
+                content: '用电【影】来祭奠逝去的岁月'
+            }, {
+                border_color: '#3BA94D',
+                url: 'https://m.douban.com/doulist/16002/',
+                content: '女孩们的故事【电影】'
+            }, {
+                border_color: '#FF4055',
+                url: 'https://m.douban.com/doulist/16002/',
+                content: '科幻是未来的钥匙——科幻启示录【科幻题材】'
+            }, {
+                border_color: '#42BD56',
+                url: 'https://m.douban.com/doulist/16002/',
+                content: '带你进入不正常的世界'
+            }, {
+                border_color: '#FFC46C',
+                url: 'https://m.douban.com/doulist/458087/',
+                content: '经典韩国电影——收集100部'
+            }]
+
+        };
+    },
+
+    methods: {
+        load1: function load1() {
+            var self = this;
+            $.ajax({
+                type: 'get',
+                url: 'https://m.douban.com/rexxar/api/v2/subject_collection/movie_showing/items?os=ios&start=0&count=8&loc_id=108288&_=1507862799504',
+                dataType: 'jsonp',
+                success: function success(data) {
+                    self.name1 = data.subject_collection.name;
+                    self.item1 = data.subject_collection_items;
+                    console.log(data);
+                    console.log(self.item1[0].rating.value);
+                }
+            });
+        },
+        load2: function load2() {
+            var self = this;
+            $.ajax({
+                type: 'get',
+                url: 'https://m.douban.com/rexxar/api/v2/subject_collection/movie_free_stream/items?os=ios&start=0&count=8&loc_id=108288&_=1507862799506',
+                dataType: 'jsonp',
+                success: function success(data) {
+                    self.name2 = data.subject_collection.name;
+                    self.item2 = data.subject_collection_items;
+
+                    console.log(self.name2);
+                }
+            });
+        },
+        load3: function load3() {
+            var self = this;
+            $.ajax({
+                type: 'get',
+                url: 'https://m.douban.com/rexxar/api/v2/subject_collection/movie_latest/items?os=ios&start=0&count=8&loc_id=108288&_=1507862799513',
+                dataType: 'jsonp',
+                success: function success(data) {
+                    self.name3 = data.subject_collection.name;
+                    console.log(self.name3);
+                    self.item3 = data.subject_collection_items;
+                }
+            });
+        }
+    },
+    mounted: function mounted(data) {
+        this.load1();
+        this.load2();
+        this.load3();
+    },
+    computed: {
+        s: function s() {}
+    },
+    components: {
+        'download': _downLoad2.default
+    }
+
+}; //
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+
+/***/ }),
+/* 21 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+var render = function() {
+  var _vm = this
+  var _h = _vm.$createElement
+  var _c = _vm._self._c || _h
+  return _c("div", { staticClass: "dbMovie" }, [
+    _c(
+      "div",
+      [
+        _c("div", { staticClass: "page" }, [
+          _c("div", { staticClass: "card" }, [
+            _c("section", { attrs: { id: "movie_showing" } }, [
+              _c("header", [
+                _c("h2", [_vm._v(_vm._s(_vm.name1))]),
+                _vm._v(" "),
+                _c(
+                  "a",
+                  { attrs: { href: "/movie/nowintheater?loc_id=108288" } },
+                  [_vm._v("更多")]
+                )
+              ]),
+              _vm._v(" "),
+              _c("div", { staticClass: "section-content" }, [
+                _c(
+                  "ul",
+                  { staticClass: "row items" },
+                  _vm._l(_vm.item1, function(i) {
+                    return _c("li", { staticClass: "item item__movie" }, [
+                      _c(
+                        "a",
+                        { attrs: { href: "#home/movieDetail/" + i.id } },
+                        [
+                          _c("div", {
+                            staticClass: "item-poster",
+                            style: "background-image:url(" + i.cover.url + ")"
+                          }),
+                          _vm._v(" "),
+                          _c("span", { staticClass: "item-title" }, [
+                            _vm._v(_vm._s(i.title))
+                          ]),
+                          _vm._v(" "),
+                          _c("div", { staticClass: "item-rating" }, [
+                            _c("div", { staticClass: "rank" }, [
+                              i.rating
+                                ? _c("div", [
+                                    Math.ceil(i.rating.value / 2) == 4
+                                      ? _c("span", {
+                                          staticClass: "rate rate1",
+                                          style:
+                                            "background-image:url(./star/ic_rating_s.png)"
+                                        })
+                                      : _vm._e(),
+                                    _vm._v(" "),
+                                    Math.ceil(i.rating.value / 2) == 5
+                                      ? _c("span", {
+                                          staticClass: "rate rate2",
+                                          style:
+                                            "background-image:url(./star/ic_rating_s.png)"
+                                        })
+                                      : _vm._e(),
+                                    _vm._v(" "),
+                                    Math.ceil(i.rating.value / 2) == 3
+                                      ? _c("span", {
+                                          staticClass: "rate rate3",
+                                          style:
+                                            "background-image:url(./star/ic_rating_s.png)"
+                                        })
+                                      : _vm._e(),
+                                    _vm._v(" "),
+                                    Math.ceil(i.rating.value / 2) == 2
+                                      ? _c("span", {
+                                          staticClass: "rate rate4",
+                                          style:
+                                            "background-image:url(./star/ic_rating_s.png)"
+                                        })
+                                      : _vm._e(),
+                                    _vm._v(" "),
+                                    Math.ceil(i.rating.value / 2) == 1
+                                      ? _c("span", {
+                                          staticClass: "rate rate5",
+                                          style:
+                                            "background-image:url(./star/ic_rating_s.png)"
+                                        })
+                                      : _vm._e()
+                                  ])
+                                : _vm._e(),
+                              _vm._v(" "),
+                              i.rating
+                                ? _c("span", [_vm._v(_vm._s(i.rating.value))])
+                                : _vm._e(),
+                              _vm._v(" "),
+                              !i.rating
+                                ? _c("span", [_vm._v("暂无评分")])
+                                : _vm._e()
+                            ])
+                          ])
+                        ]
+                      )
+                    ])
+                  })
+                )
+              ])
+            ]),
+            _vm._v(" "),
+            _c("section", { attrs: { id: "movie_free_stream" } }, [
+              _c("header", [
+                _c("h2", [_vm._v(_vm._s(_vm.name2))]),
+                _vm._v(" "),
+                _c(
+                  "a",
+                  { attrs: { href: "/movie/nowintheater?loc_id=108288" } },
+                  [_vm._v("更多")]
+                )
+              ]),
+              _vm._v(" "),
+              _c("div", { staticClass: "section-content" }, [
+                _c(
+                  "ul",
+                  { staticClass: "row items" },
+                  _vm._l(_vm.item2, function(i) {
+                    return _c(
+                      "li",
+                      { staticClass: "item item__movie", attrs: { id: i.id } },
+                      [
+                        _c(
+                          "a",
+                          {
+                            attrs: {
+                              href: "/movie/subject/27038183?refer=home",
+                              href: "#home/movieDetail/" + i.id
+                            }
+                          },
+                          [
+                            _c("div", {
+                              staticClass: "item-poster",
+                              style:
+                                "background-image: url(" + i.cover.url + ")"
+                            }),
+                            _vm._v(" "),
+                            _c("span", { staticClass: "item-title" }, [
+                              _vm._v(_vm._s(i.title))
+                            ]),
+                            _vm._v(" "),
+                            _c("div", { staticClass: "item-rating" }, [
+                              _c("div", { staticClass: "rank" }, [
+                                i.rating
+                                  ? _c("div", [
+                                      Math.ceil(i.rating.value / 2) == 4
+                                        ? _c("span", {
+                                            staticClass: "rate rate1",
+                                            style:
+                                              "background-image:url(./star/ic_rating_s.png)"
+                                          })
+                                        : _vm._e(),
+                                      _vm._v(" "),
+                                      Math.ceil(i.rating.value / 2) == 5
+                                        ? _c("span", {
+                                            staticClass: "rate rate2",
+                                            style:
+                                              "background-image:url(./star/ic_rating_s.png)"
+                                          })
+                                        : _vm._e(),
+                                      _vm._v(" "),
+                                      Math.ceil(i.rating.value / 2) == 3
+                                        ? _c("span", {
+                                            staticClass: "rate rate3",
+                                            style:
+                                              "background-image:url(./star/ic_rating_s.png)"
+                                          })
+                                        : _vm._e(),
+                                      _vm._v(" "),
+                                      Math.ceil(i.rating.value / 2) == 2
+                                        ? _c("span", {
+                                            staticClass: "rate rate4",
+                                            style:
+                                              "background-image:url(./star/ic_rating_s.png)"
+                                          })
+                                        : _vm._e(),
+                                      _vm._v(" "),
+                                      Math.ceil(i.rating.value / 2) == 1
+                                        ? _c("span", {
+                                            staticClass: "rate rate5",
+                                            style:
+                                              "background-image:url(./star/ic_rating_s.png)"
+                                          })
+                                        : _vm._e()
+                                    ])
+                                  : _vm._e(),
+                                _vm._v(" "),
+                                i.rating
+                                  ? _c("span", [_vm._v(_vm._s(i.rating.value))])
+                                  : _vm._e(),
+                                _vm._v(" "),
+                                !i.rating
+                                  ? _c("span", [_vm._v("暂无评分")])
+                                  : _vm._e()
+                              ])
+                            ])
+                          ]
+                        )
+                      ]
+                    )
+                  })
+                )
+              ])
+            ]),
+            _vm._v(" "),
+            _c("section", { attrs: { id: "movie_latest" } }, [
+              _c("header", [
+                _c("h2", [_vm._v(_vm._s(_vm.name3))]),
+                _vm._v(" "),
+                _c(
+                  "a",
+                  { attrs: { href: "/movie/nowintheater?loc_id=108288" } },
+                  [_vm._v("更多")]
+                )
+              ]),
+              _vm._v(" "),
+              _c("div", { staticClass: "section-content" }, [
+                _c(
+                  "ul",
+                  { staticClass: "row items" },
+                  _vm._l(_vm.item3, function(i) {
+                    return _c(
+                      "li",
+                      { staticClass: "item item__movie", attrs: { id: i.id } },
+                      [
+                        _c(
+                          "a",
+                          { attrs: { href: "#home/movieDetail/" + i.id } },
+                          [
+                            _c("div", {
+                              staticClass: "item-poster",
+                              style:
+                                "background-image: url(" + i.cover.url + ")"
+                            }),
+                            _vm._v(" "),
+                            _c("span", { staticClass: "item-title" }, [
+                              _vm._v(_vm._s(i.title))
+                            ]),
+                            _vm._v(" "),
+                            _c("div", { staticClass: "item-rating" }, [
+                              _c("div", { staticClass: "rank" }, [
+                                i.rating
+                                  ? _c("div", [
+                                      Math.ceil(i.rating.value / 2) == 4
+                                        ? _c("span", {
+                                            staticClass: "rate rate1",
+                                            style:
+                                              "background-image:url(./star/ic_rating_s.png)"
+                                          })
+                                        : _vm._e(),
+                                      _vm._v(" "),
+                                      Math.ceil(i.rating.value / 2) == 5
+                                        ? _c("span", {
+                                            staticClass: "rate rate2",
+                                            style:
+                                              "background-image:url(./star/ic_rating_s.png)"
+                                          })
+                                        : _vm._e(),
+                                      _vm._v(" "),
+                                      Math.ceil(i.rating.value / 2) == 3
+                                        ? _c("span", {
+                                            staticClass: "rate rate3",
+                                            style:
+                                              "background-image:url(./star/ic_rating_s.png)"
+                                          })
+                                        : _vm._e(),
+                                      _vm._v(" "),
+                                      Math.ceil(i.rating.value / 2) == 2
+                                        ? _c("span", {
+                                            staticClass: "rate rate4",
+                                            style:
+                                              "background-image:url(./star/ic_rating_s.png)"
+                                          })
+                                        : _vm._e(),
+                                      _vm._v(" "),
+                                      Math.ceil(i.rating.value / 2) == 1
+                                        ? _c("span", {
+                                            staticClass: "rate rate5",
+                                            style:
+                                              "background-image:url(./star/ic_rating_s.png)"
+                                          })
+                                        : _vm._e()
+                                    ])
+                                  : _vm._e(),
+                                _vm._v(" "),
+                                i.rating
+                                  ? _c("span", [_vm._v(_vm._s(i.rating.value))])
+                                  : _vm._e(),
+                                _vm._v(" "),
+                                !i.rating
+                                  ? _c("span", [_vm._v("暂无评分")])
+                                  : _vm._e()
+                              ])
+                            ])
+                          ]
+                        )
+                      ]
+                    )
+                  })
+                )
+              ])
+            ]),
+            _vm._v(" "),
+            _vm._m(0),
+            _vm._v(" "),
+            _vm._m(1)
+          ])
+        ]),
+        _vm._v(" "),
+        _c("download")
+      ],
+      1
+    )
+  ])
+}
+var staticRenderFns = [
+  function() {
+    var _vm = this
+    var _h = _vm.$createElement
+    var _c = _vm._self._c || _h
+    return _c("section", { staticClass: "interests" }, [
+      _c("header", [_c("h2", [_vm._v("发现好电影")])]),
+      _vm._v(" "),
+      _c("div", { staticClass: "section-content" }, [
+        _c("ul", [
+          _c("li", { staticStyle: { "border-color": "#CC3344" } }, [
+            _c(
+              "a",
+              {
+                staticStyle: { color: "#CC3344" },
+                attrs: { href: "https://m.douban.com/doulist/968362/" }
+              },
+              [_vm._v("同时入选IMDB250和豆瓣电影250的电影")]
+            )
+          ]),
+          _vm._v(" "),
+          _c("li", { staticStyle: { "border-color": "#42BD56" } }, [
+            _c(
+              "a",
+              {
+                staticStyle: { color: "#42BD56" },
+                attrs: { href: "https://m.douban.com/doulist/16002/" }
+              },
+              [_vm._v("带你进入不正常的世界")]
+            )
+          ]),
+          _vm._v(" "),
+          _c("li", { staticStyle: { "border-color": "#2384E8" } }, [
+            _c(
+              "a",
+              {
+                staticStyle: { color: "#2384E8" },
+                attrs: { href: "https://m.douban.com/doulist/190343/" }
+              },
+              [_vm._v("用电【影】来祭奠逝去的岁月")]
+            )
+          ]),
+          _vm._v(" "),
+          _c("li", { staticStyle: { "border-color": "#3BA94D" } }, [
+            _c(
+              "a",
+              {
+                staticStyle: { color: "#3BA94D" },
+                attrs: { href: "https://m.douban.com/doulist/1125971/" }
+              },
+              [_vm._v("女孩们的故事【电影】")]
+            )
+          ]),
+          _vm._v(" "),
+          _c("li", { staticClass: "line" }),
+          _vm._v(" "),
+          _c("li", { staticStyle: { "border-color": "#FF4055" } }, [
+            _c(
+              "a",
+              {
+                staticStyle: { color: "#FF4055" },
+                attrs: { href: "https://m.douban.com/doulist/4253902/" }
+              },
+              [_vm._v("科幻是未来的钥匙——科幻启示录【科幻题材】")]
+            )
+          ]),
+          _vm._v(" "),
+          _c("li", { staticStyle: { "border-color": "#4F9DED" } }, [
+            _c(
+              "a",
+              {
+                staticStyle: { color: "#4F9DED" },
+                attrs: { href: "https://m.douban.com/doulist/121326/" }
+              },
+              [_vm._v("美国生活面面观")]
+            )
+          ]),
+          _vm._v(" "),
+          _c("li", { staticStyle: { "border-color": "#FFAC2D" } }, [
+            _c(
+              "a",
+              {
+                staticStyle: { color: "#FFAC2D" },
+                attrs: { href: "https://m.douban.com/doulist/37479562/" }
+              },
+              [_vm._v("2015终极期待")]
+            )
+          ]),
+          _vm._v(" "),
+          _c("li", { staticStyle: { "border-color": "#FFC46C" } }, [
+            _c(
+              "a",
+              {
+                staticStyle: { color: "#FFC46C" },
+                attrs: { href: "https://m.douban.com/doulist/458087/" }
+              },
+              [_vm._v("经典韩国电影——收集100部")]
+            )
+          ])
+        ])
+      ])
+    ])
+  },
+  function() {
+    var _vm = this
+    var _h = _vm.$createElement
+    var _c = _vm._self._c || _h
+    return _c("section", { staticClass: "types" }, [
+      _c("header", [_c("h2", [_vm._v("分类浏览")])]),
+      _vm._v(" "),
+      _c("div", { staticClass: "section-content" }, [
+        _c("a", { attrs: { name: "cate" } }),
+        _vm._v(" "),
+        _c("ul", { staticClass: "type-list" }, [
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/classic" } }, [
+              _vm._v("经典"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/underrated" } }, [
+              _vm._v("冷门佳片"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/doubantop" } }, [
+              _vm._v("豆瓣高分"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/action" } }, [
+              _vm._v("动作"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/comedy" } }, [
+              _vm._v("喜剧"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/love" } }, [
+              _vm._v("爱情"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/mystery" } }, [
+              _vm._v("悬疑"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/horror" } }, [
+              _vm._v("恐怖"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/scifi" } }, [
+              _vm._v("科幻"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/sweet" } }, [
+              _vm._v("治愈"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/artfilm" } }, [
+              _vm._v("文艺"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/youth" } }, [
+              _vm._v("成长"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/animation" } }, [
+              _vm._v("动画"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/chinese" } }, [
+              _vm._v("华语"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/western" } }, [
+              _vm._v("欧美"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/korean" } }, [
+              _vm._v("韩国"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li", [
+            _c("a", { attrs: { href: "/movie/japanese" } }, [
+              _vm._v("日本"),
+              _c("span")
+            ])
+          ]),
+          _vm._v(" "),
+          _c("li")
+        ])
+      ])
+    ])
+  }
+]
+render._withStripped = true
+var esExports = { render: render, staticRenderFns: staticRenderFns }
+/* harmony default export */ __webpack_exports__["a"] = (esExports);
+if (false) {
+  module.hot.accept()
+  if (module.hot.data) {
+    require("vue-hot-reload-api")      .rerender("data-v-4ed459d5", esExports)
+  }
+}
+
+/***/ }),
+/* 22 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbMovieDetail_vue__ = __webpack_require__(25);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbMovieDetail_vue___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbMovieDetail_vue__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_vue_loader_lib_template_compiler_index_id_data_v_dd06c7f4_hasScoped_true_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_bustCache_dbMovieDetail_vue__ = __webpack_require__(26);
+var disposed = false
+function injectStyle (ssrContext) {
+  if (disposed) return
+  __webpack_require__(23)
+}
+var normalizeComponent = __webpack_require__(2)
+/* script */
+
+/* template */
+
+/* template functional */
+  var __vue_template_functional__ = false
+/* styles */
+var __vue_styles__ = injectStyle
+/* scopeId */
+var __vue_scopeId__ = "data-v-dd06c7f4"
+/* moduleIdentifier (server only) */
+var __vue_module_identifier__ = null
+var Component = normalizeComponent(
+  __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbMovieDetail_vue___default.a,
+  __WEBPACK_IMPORTED_MODULE_1__node_modules_vue_loader_lib_template_compiler_index_id_data_v_dd06c7f4_hasScoped_true_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_bustCache_dbMovieDetail_vue__["a" /* default */],
+  __vue_template_functional__,
+  __vue_styles__,
+  __vue_scopeId__,
+  __vue_module_identifier__
+)
+Component.options.__file = "components\\lantao\\dbMovieDetail.vue"
+if (Component.esModule && Object.keys(Component.esModule).some(function (key) {  return key !== "default" && key.substr(0, 2) !== "__"})) {  console.error("named exports are not supported in *.vue files.")}
+
+/* hot reload */
+if (false) {(function () {
+  var hotAPI = require("vue-hot-reload-api")
+  hotAPI.install(require("vue"), false)
+  if (!hotAPI.compatible) return
+  module.hot.accept()
+  if (!module.hot.data) {
+    hotAPI.createRecord("data-v-dd06c7f4", Component.options)
+  } else {
+    hotAPI.reload("data-v-dd06c7f4", Component.options)
+  }
+  module.hot.dispose(function (data) {
+    disposed = true
+  })
+})()}
+
+/* harmony default export */ __webpack_exports__["default"] = (Component.exports);
+
+
+/***/ }),
+/* 23 */
+/***/ (function(module, exports, __webpack_require__) {
+
+// style-loader: Adds some css to the DOM by adding a <style> tag
+
+// load the styles
+var content = __webpack_require__(24);
+if(typeof content === 'string') content = [[module.i, content, '']];
+if(content.locals) module.exports = content.locals;
+// add the styles to the DOM
+var update = __webpack_require__(1)("6704ab33", content, false);
+// Hot Module Replacement
+if(false) {
+ // When the styles change, update the <style> tags
+ if(!content.locals) {
+   module.hot.accept("!!../../node_modules/css-loader/index.js?sourceMap!../../node_modules/vue-loader/lib/style-compiler/index.js?{\"vue\":true,\"id\":\"data-v-dd06c7f4\",\"scoped\":true,\"hasInlineConfig\":false}!../../node_modules/vue-loader/lib/selector.js?type=styles&index=0&bustCache!./dbMovieDetail.vue", function() {
+     var newContent = require("!!../../node_modules/css-loader/index.js?sourceMap!../../node_modules/vue-loader/lib/style-compiler/index.js?{\"vue\":true,\"id\":\"data-v-dd06c7f4\",\"scoped\":true,\"hasInlineConfig\":false}!../../node_modules/vue-loader/lib/selector.js?type=styles&index=0&bustCache!./dbMovieDetail.vue");
+     if(typeof newContent === 'string') newContent = [[module.id, newContent, '']];
+     update(newContent);
+   });
+ }
+ // When the module is disposed, remove the <style> tags
+ module.hot.dispose(function() { update(); });
+}
+
+/***/ }),
+/* 24 */
+/***/ (function(module, exports, __webpack_require__) {
+
+exports = module.exports = __webpack_require__(0)(true);
+// imports
+
+
+// module
+exports.push([module.i, "\n.promo_top_banner+.card[data-v-dd06c7f4] {\r\n    margin-top: 0px;\n}\n.card[data-v-dd06c7f4] {\r\n    margin: 0 18px;\n}\n.promo_top_banner[data-v-dd06c7f4] {\r\n    margin-bottom: 0;\r\n    max-width: 100%;\r\n    overflow: hidden;\r\n    text-align: left;\r\n    position: relative;\n}\n.promo_top_banner .banner_bg[data-v-dd06c7f4] {\r\n    font-size: 0;\r\n    padding-bottom: 21.33333%;\r\n    position: relative;\n}\n.promo_top_banner .banner_bg .img[data-v-dd06c7f4] {\r\n    width: 100%;\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\n}\n.promo_top_banner .banner_wrapper[data-v-dd06c7f4] {\r\n    position: absolute;\r\n    left: 18px;\r\n    top: 0;\r\n    bottom: 0;\r\n    right: 10px;\n}\n.promo_top_banner .banner_wrapper .banner_inner[data-v-dd06c7f4]{\r\n    width: 100%;\r\n    height: 100%;\r\n    display: flex;\r\n    align-items: center;\n}\n.promo_top_banner .banner_wrapper .banner_inner>*[data-v-dd06c7f4] {\r\n    vertical-align: middle;\n}\n.promo_top_banner .button_wrapper[data-v-dd06c7f4] {\r\n    white-space: nowrap;\r\n    font-size: 0;\r\n    padding-left: 12px;\r\n    flex:1;\r\n    margin-left:50px;\n}\n.button_wrapper[data-v-dd06c7f4] {\r\n    margin: 0;\r\n    flex:1;\n}\n.promo_top_banner .promo_title_text[data-v-dd06c7f4] {\r\n    font-size: 14px;\r\n    font-weight: normal;\r\n    line-height: 22px;\r\n    color: #2CA532;\n}\n.page[data-v-dd06c7f4] {\r\n    padding-top: 47px;\r\n    max-width: 650px;\r\n    background: #fff;\r\n    margin: 0 auto;\r\n    overflow-x: hidden;\n}\n@media (max-width: 413px) and (min-width: 375px){\n.promo_title[data-v-dd06c7f4], .promo_text[data-v-dd06c7f4] {\r\n        font-size: 21px;\n}\n}\n.promo_button.download_app[data-v-dd06c7f4] {\r\n    color: #fff;\r\n    border: 1px solid #42bd56;\r\n    background: #42bd56;\n}\n.promo_top_banner .promo_button[data-v-dd06c7f4] {\r\n    font-size: 13px;\r\n    font-weight: bold;\r\n    width: auto;\r\n    padding: 0 14px;\r\n    position: relative;\n}\n.promo_top_banner .promo_title[data-v-dd06c7f4] {\r\n    margin: 0;\n}\n.promo_button[data-v-dd06c7f4] {\r\n    display: inline-block;\r\n    border-radius: 3px;\r\n    line-height: 2;\n}\n.promo_top_banner .promo_button[data-v-dd06c7f4]:after {\r\n    content: '';\r\n    position: absolute;\r\n    left: -4px;\r\n    right: -4px;\r\n    top: -10px;\r\n    bottom: -10px;\n}\n.promo_button.open_app[data-v-dd06c7f4] {\r\n    color: #42bd56;\r\n    border: 1px solid #42bd56;\r\n    margin-left:10px;\n}\n.subject-mark .mark-item[data-v-dd06c7f4] {\r\n    margin-bottom: 30px;\r\n    display: flex;\r\n    align-items: center;\n}\n.subject-mark .mark-item a[data-v-dd06c7f4] {\r\n    height: 30px;\r\n    line-height: 30px;\r\n    display: block;\r\n    border: 1px solid #ffb712;\r\n    border-radius: 3px;\r\n    margin-right: 10px;\r\n    color: #ffb712;\r\n    font-size: 15px;\r\n    text-align: center;\r\n    flex: 1;\n}\n.list[data-v-dd06c7f4] {\r\n    margin-right: -18px;\n}\n.list li[data-v-dd06c7f4]:first-child {\r\n    padding-top: 0;\n}\n.list li[data-v-dd06c7f4] {\r\n    position: relative;\r\n    padding: 15px 18px 15px 0;\r\n    word-wrap: break-word;\r\n    overflow: hidden;\n}\n.comment-list li .desc[data-v-dd06c7f4] {\r\n    font-size: 0;\r\n    line-height: normal;\r\n    margin: 0 0 11px;\r\n    color: #494949;\r\n    position: relative;\n}\n.comment-list li p[data-v-dd06c7f4] {\r\n    padding: 0 0 0 40px;\r\n    line-height: 22px;\r\n    color: #494949;\n}\n.list a[data-v-dd06c7f4] {\r\n    display: block;\r\n    overflow: hidden;\r\n    text-decoration: none;\r\n    color: #494949;\n}\n.list li .desc>a[data-v-dd06c7f4] {\r\n    display: inline;\n}\n.comment-list li .desc strong[data-v-dd06c7f4] {\r\n    font-size: 15px;\r\n    display: inline-block;\r\n    vertical-align: text-top;\r\n    margin-right: 6px;\n}\n.comment-list li .desc .date[data-v-dd06c7f4] {\r\n    margin-top: 6px;\r\n    font-size: 12px;\r\n    color: #aaa;\n}\n.comment-list li .desc img[data-v-dd06c7f4], .comment-list li .desc .avatar[data-v-dd06c7f4] {\r\n    width: 36px;\r\n    border-radius: 50%;\r\n    vertical-align: text-top;\r\n    margin-right: 10px;\r\n    float: left;\n}\n.list a[data-v-dd06c7f4] {\r\n    color: #494949;\n}\nh2[data-v-dd06c7f4] {\r\n    color: #aaa;\r\n    margin: 0 0 15px;\r\n    font-size: 15px;\n}\n.ic-btn .text[data-v-dd06c7f4] {\r\n    color: #ccc;\r\n    margin-left: 3px;\r\n    position: relative;\r\n    left: 0;\r\n    top: -3px;\n}\n.comment-list li .btn-info[data-v-dd06c7f4] {\r\n    height: 22px;\r\n    margin: 10px 0 0 40px;\n}\n.list li[data-v-dd06c7f4]::after {\r\n    left: 0;\r\n    bottom: 0;\r\n    width: 100%;\r\n    height: 1px;\r\n    background: #E8E8E8;\r\n    content: '';\r\n    position: absolute;\n}\n.ic-btn[data-v-dd06c7f4] {\r\n    display: inline-block;\r\n    margin-right: 20px;\r\n    font-size: 14px;\r\n    cursor: pointer;\n}\n.ic-btn i[data-v-dd06c7f4]{\r\n    width:20px;\r\n    height:20px;\r\n    background-position: center center;\r\n    background-repeat: no-repeat;\r\n    display: inline-block;\r\n    margin-bottom: -2px;\n}\n.items[data-v-dd06c7f4] {\r\n    font-size: 0;\r\n    white-space: nowrap;\r\n    overflow-x: auto;\n}\n.item__celebrity[data-v-dd06c7f4]:first-child {\r\n    margin-left: 0;\n}\n.item__celebrity[data-v-dd06c7f4] {\r\n    font-size: 14px;\r\n    width: 75px;\n}\n.item a[data-v-dd06c7f4] {\r\n    color: #111;\r\n    display:block;\n}\n.item-poster[data-v-dd06c7f4] {\r\n    width: 100%;\r\n    overflow: hidden;\r\n    background-size: cover;\r\n    background-position: center;\n}\n.item__celebrity .item-title[data-v-dd06c7f4] {\r\n    overflow: hidden;\r\n    font-size: 14px;\r\n    line-height: 1.5;\r\n    white-space: normal;\r\n    text-align: center;\r\n    color: #494949;\r\n    margin-top: 8px;\r\n    display:block;\n}\n.item__celebrity .item-title.role[data-v-dd06c7f4] {\r\n    color: #aaa;\n}\n.item[data-v-dd06c7f4] {\r\n    display: inline-block;\r\n    vertical-align: top;\n}\n.item__celebrity[data-v-dd06c7f4] {\r\n    width: 75px;\n}\n.items>*[data-v-dd06c7f4] {\r\n    font-size: .94rem;\r\n    white-space: normal;\n}\n.item[data-v-dd06c7f4] {\r\n    margin-left: 0.48rem;\n}\nsection[data-v-dd06c7f4] {\r\n    margin-bottom: 30px;\n}\n.item-poster[data-v-dd06c7f4]:before {\r\n    content: \"\";\r\n    float: left;\r\n    margin-top: 142.85714%;\n}\r\n", "", {"version":3,"sources":["C:/Users/Administrator/Desktop/douban/douBanSix/components/lantao/components/lantao/dbMovieDetail.vue?27b5763e"],"names":[],"mappings":";AA8HA;IACA,gBAAA;CACA;AACA;IACA,eAAA;CACA;AACA;IACA,iBAAA;IACA,gBAAA;IACA,iBAAA;IACA,iBAAA;IACA,mBAAA;CACA;AACA;IACA,aAAA;IACA,0BAAA;IACA,mBAAA;CACA;AACA;IACA,YAAA;IACA,mBAAA;IACA,OAAA;IACA,QAAA;CACA;AACA;IACA,mBAAA;IACA,WAAA;IACA,OAAA;IACA,UAAA;IACA,YAAA;CACA;AACA;IACA,YAAA;IACA,aAAA;IACA,cAAA;IACA,oBAAA;CACA;AACA;IACA,uBAAA;CACA;AACA;IACA,oBAAA;IACA,aAAA;IACA,mBAAA;IACA,OAAA;IACA,iBAAA;CACA;AACA;IACA,UAAA;IACA,OAAA;CACA;AACA;IACA,gBAAA;IACA,oBAAA;IACA,kBAAA;IACA,eAAA;CACA;AACA;IACA,kBAAA;IACA,iBAAA;IACA,iBAAA;IACA,eAAA;IACA,mBAAA;CACA;AACA;AACA;QACA,gBAAA;CACA;CACA;AACA;IACA,YAAA;IACA,0BAAA;IACA,oBAAA;CACA;AACA;IACA,gBAAA;IACA,kBAAA;IACA,YAAA;IACA,gBAAA;IACA,mBAAA;CACA;AACA;IACA,UAAA;CACA;AACA;IACA,sBAAA;IACA,mBAAA;IACA,eAAA;CACA;AACA;IACA,YAAA;IACA,mBAAA;IACA,WAAA;IACA,YAAA;IACA,WAAA;IACA,cAAA;CACA;AACA;IACA,eAAA;IACA,0BAAA;IACA,iBAAA;CACA;AACA;IACA,oBAAA;IACA,cAAA;IACA,oBAAA;CACA;AACA;IACA,aAAA;IACA,kBAAA;IACA,eAAA;IACA,0BAAA;IACA,mBAAA;IACA,mBAAA;IACA,eAAA;IACA,gBAAA;IACA,mBAAA;IACA,QAAA;CACA;AACA;IACA,oBAAA;CACA;AACA;IACA,eAAA;CACA;AACA;IACA,mBAAA;IACA,0BAAA;IACA,sBAAA;IACA,iBAAA;CACA;AACA;IACA,aAAA;IACA,oBAAA;IACA,iBAAA;IACA,eAAA;IACA,mBAAA;CACA;AACA;IACA,oBAAA;IACA,kBAAA;IACA,eAAA;CACA;AACA;IACA,eAAA;IACA,iBAAA;IACA,sBAAA;IACA,eAAA;CACA;AACA;IACA,gBAAA;CACA;AACA;IACA,gBAAA;IACA,sBAAA;IACA,yBAAA;IACA,kBAAA;CACA;AACA;IACA,gBAAA;IACA,gBAAA;IACA,YAAA;CACA;AACA;IACA,YAAA;IACA,mBAAA;IACA,yBAAA;IACA,mBAAA;IACA,YAAA;CACA;AACA;IACA,eAAA;CACA;AACA;IACA,YAAA;IACA,iBAAA;IACA,gBAAA;CACA;AAEA;IACA,YAAA;IACA,iBAAA;IACA,mBAAA;IACA,QAAA;IACA,UAAA;CACA;AACA;IACA,aAAA;IACA,sBAAA;CACA;AACA;IACA,QAAA;IACA,UAAA;IACA,YAAA;IACA,YAAA;IACA,oBAAA;IACA,YAAA;IACA,mBAAA;CACA;AACA;IACA,sBAAA;IACA,mBAAA;IACA,gBAAA;IACA,gBAAA;CACA;AACA;IACA,WAAA;IACA,YAAA;IACA,mCAAA;IACA,6BAAA;IACA,sBAAA;IACA,oBAAA;CACA;AACA;IACA,aAAA;IACA,oBAAA;IACA,iBAAA;CACA;AACA;IACA,eAAA;CACA;AACA;IACA,gBAAA;IACA,YAAA;CACA;AACA;IACA,YAAA;IACA,cAAA;CACA;AACA;IACA,YAAA;IACA,iBAAA;IACA,uBAAA;IACA,4BAAA;CACA;AACA;IACA,iBAAA;IACA,gBAAA;IACA,iBAAA;IACA,oBAAA;IACA,mBAAA;IACA,eAAA;IACA,gBAAA;IACA,cAAA;CACA;AACA;IACA,YAAA;CACA;AACA;IACA,sBAAA;IACA,oBAAA;CACA;AACA;IACA,YAAA;CACA;AACA;IACA,kBAAA;IACA,oBAAA;CACA;AACA;IACA,qBAAA;CACA;AACA;IACA,oBAAA;CACA;AACA;IACA,YAAA;IACA,YAAA;IACA,uBAAA;CACA","file":"dbMovieDetail.vue","sourcesContent":["<template>\r\n    <div class=\"dbMovieDetail\">\r\n        <div class=\"page\">\r\n            <section class=\"promo_top_banner\" style=\"display: block !important\">\r\n                  <div class=\"banner_bg\">\r\n                    <img src=\"https://img3.doubanio.com/f/talion/fbcb08987a36258354c6037211d94286bef9716c/pics/card/promotion_bg.jpg\" class=\"img\">\r\n                  </div>\r\n                  <div class=\"banner_wrapper\">\r\n                    <div class=\"banner_inner\">\r\n                      <div class=\"promo_title\">\r\n                        \r\n                        <span class=\"promo_title_text\">用 App 打开</span><br>\r\n                        <span class=\"promo_title_text\">查看主演的其它电影</span>\r\n                      </div>\r\n\r\n                      <div class=\"button_wrapper\">\r\n                        <a href=\"https://www.douban.com/doubanapp/app?model=B&amp;copy=1&amp;page=movie&amp;channel=card_movie&amp;direct_dl=1\" rel=\"nofollow\" onclick=\"ga('send', 'event', 'ios', 'click', 'subject banner download')\" class=\"promo_button download_app\">极速下载</a>\r\n                        <a href=\"https://www.douban.com/doubanapp/dispatch?from=mdouban&amp;download=1&amp;model=B&amp;copy=1&amp;page=movie&amp;channel=card_movie&amp;uri=%2Fmovie%2F27038183\" rel=\"nofollow\" onclick=\"ga('send', 'event', 'ios', 'click', 'card more link')\" class=\"promo_button open_app\">打开</a>\r\n                      </div>\r\n                    </div>\r\n                  </div>\r\n            </section>\r\n        <div class=\"card\">\r\n                \r\n                <section class=\"subject-mark\" data-type=\"movie\" data-id=\"27038183\">\r\n                    <div class=\"mark-item\">\r\n                        <a href=\"javascript:;\" rel=\"nofollow\" name=\"pbtn-27038183-wish\" class=\"\">\r\n                            <span>想看</span>\r\n                        </a>\r\n                        <a href=\"javascript:;\" rel=\"nofollow\" name=\"pbtn-27038183-collect\">\r\n                            <span>看过</span>\r\n                        </a>\r\n                    </div>\r\n                </section>\r\n                <section class=\"\" id=\"celebrities\">\r\n                    <header>\r\n                        <h2>影人</h2>\r\n                    </header>\r\n                    <div class=\"section-content\">\r\n                            <ul class=\"row items\">\r\n                                <li class=\"item item__celebrity\" v-for=\"c in credits\">\r\n                                  <a href=\"https://movie.douban.com/celebrity/1350407/\">\r\n                                    <div class=\"item-poster\" :style=\"'background-image: url('+c.cover_url+')'\">\r\n                                    </div>\r\n                                    <span class=\"item-title name\">{{c.name}}</span>\r\n                                    <span class=\"item-title role\">{{c.roles[0]}}</span>\r\n                                  </a>\r\n                                </li>\r\n                            </ul>\r\n                    </div>\r\n                </section>\r\n                <section class=\"subject-comments\">\r\n                    <h2>的短评({{total}})</h2>\r\n                    <div class=\"bd\" id=\"comment-list\">\r\n                        <ul data-reactroot=\"\" class=\"list comment-list\">\r\n                            <li class=\"\" v-for=\"i in interests\">\r\n                                <div class=\"desc\">\r\n                                    <a href=\"/people/151784886/\"><img :src=\"i.user.avatar\" alt=\"辣眼看电视\"></a><div class=\"user-info\">\r\n                                        <strong>{{i.user.name}}</strong>\r\n                                        <span class=\"rating-stars\" data-rating=\"4\">\r\n                                        <span class=\"rating-star rating-star-medium-full\"></span>\r\n                                        <span class=\"rating-star rating-star-medium-full\"></span><span class=\"rating-star rating-star-medium-full\"></span>\r\n                                        <span class=\"rating-star rating-star-medium-full\"></span><span class=\"rating-star rating-star-medium-gray\"></span></span>\r\n                                        <div class=\"date\">{{i.create_time}}</div></div></div>\r\n                                        <p>{{i.comment}}</p><div class=\"btn-info\"><div class=\"ic-btn ic-btn-like  left \">\r\n                                            <i style=\"background-image:url(https://img3.doubanio.com/f/talion/7a0756b3b6e67b59ea88653bc0cfa14f61ff219d/pics/card/ic_like_gray.svg)\"></i><span class=\"text\">{{i.vote_count}}</span></div>\r\n                                        <div class=\"ic-btn ic-btn-more right\"></div></div>\r\n                                        </li>\r\n                        </ul>\r\n                    </div>\r\n                </section>\r\n            </div>\r\n        </div>\r\n    </div>\r\n</template>\r\n\r\n<script type=\"text/javascript\">\r\n    export default {\r\n        data(){\r\n            return{\r\n                id:'',\r\n                interests:[],\r\n                total:0,\r\n                credits:[]\r\n            }\r\n        },\r\n        methods:{\r\n            load:function(){\r\n                var self = this;\r\n                $.ajax({\r\n                    type:'get',\r\n                    url:'https://m.douban.com/rexxar/api/v2/movie/'+self.id+'/interests?count=4&order_by=hot&start=0&ck=DQxl&for_mobile=1',\r\n                    dataType:'jsonp',\r\n                    success:function(data){\r\n                        self.total = data.total;\r\n                        self.interests = data.interests;\r\n\r\n                        console.log(data);\r\n                    }\r\n                })\r\n            },\r\n            loadCredits:function(){\r\n                var self = this;\r\n                $.ajax({\r\n                    type:'get',\r\n                    url:'https://m.douban.com/rexxar/api/v2/movie/'+self.id+'/credits',\r\n\r\n                    dataType:'jsonp',\r\n                    success:function(data){\r\n                        self.credits = data.credits[1].celebrities;\r\n                        console.log(data.credits);\r\n                    }\r\n                })\r\n            }\r\n        },\r\n        mounted:function(data){\r\n            var idarr = window.location.hash.split('/');\r\n            this.id = idarr[idarr.length-1];\r\n            console.log(this.id);\r\n            this.load();\r\n            this.loadCredits();\r\n        }\r\n    }\r\n</script>\r\n\r\n<style scoped>\r\n.promo_top_banner+.card {\r\n    margin-top: 0px;\r\n}\r\n.card {\r\n    margin: 0 18px;\r\n}\r\n.promo_top_banner {\r\n    margin-bottom: 0;\r\n    max-width: 100%;\r\n    overflow: hidden;\r\n    text-align: left;\r\n    position: relative;\r\n}\r\n.promo_top_banner .banner_bg {\r\n    font-size: 0;\r\n    padding-bottom: 21.33333%;\r\n    position: relative;\r\n}\r\n.promo_top_banner .banner_bg .img {\r\n    width: 100%;\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\r\n}\r\n.promo_top_banner .banner_wrapper {\r\n    position: absolute;\r\n    left: 18px;\r\n    top: 0;\r\n    bottom: 0;\r\n    right: 10px;\r\n}\r\n.promo_top_banner .banner_wrapper .banner_inner{\r\n    width: 100%;\r\n    height: 100%;\r\n    display: flex;\r\n    align-items: center;\r\n}\r\n.promo_top_banner .banner_wrapper .banner_inner>* {\r\n    vertical-align: middle;\r\n}\r\n.promo_top_banner .button_wrapper {\r\n    white-space: nowrap;\r\n    font-size: 0;\r\n    padding-left: 12px;\r\n    flex:1;\r\n    margin-left:50px;\r\n}\r\n.button_wrapper {\r\n    margin: 0;\r\n    flex:1;\r\n}\r\n.promo_top_banner .promo_title_text {\r\n    font-size: 14px;\r\n    font-weight: normal;\r\n    line-height: 22px;\r\n    color: #2CA532;\r\n}\r\n.page {\r\n    padding-top: 47px;\r\n    max-width: 650px;\r\n    background: #fff;\r\n    margin: 0 auto;\r\n    overflow-x: hidden;\r\n}\r\n@media (max-width: 413px) and (min-width: 375px){\r\n    .promo_title, .promo_text {\r\n        font-size: 21px;\r\n    }\r\n}\r\n.promo_button.download_app {\r\n    color: #fff;\r\n    border: 1px solid #42bd56;\r\n    background: #42bd56;\r\n}\r\n.promo_top_banner .promo_button {\r\n    font-size: 13px;\r\n    font-weight: bold;\r\n    width: auto;\r\n    padding: 0 14px;\r\n    position: relative;\r\n}\r\n.promo_top_banner .promo_title {\r\n    margin: 0;\r\n}\r\n.promo_button {\r\n    display: inline-block;\r\n    border-radius: 3px;\r\n    line-height: 2;\r\n}\r\n.promo_top_banner .promo_button:after {\r\n    content: '';\r\n    position: absolute;\r\n    left: -4px;\r\n    right: -4px;\r\n    top: -10px;\r\n    bottom: -10px;\r\n}\r\n.promo_button.open_app {\r\n    color: #42bd56;\r\n    border: 1px solid #42bd56;\r\n    margin-left:10px;\r\n}\r\n.subject-mark .mark-item {\r\n    margin-bottom: 30px;\r\n    display: flex;\r\n    align-items: center;\r\n}\r\n.subject-mark .mark-item a {\r\n    height: 30px;\r\n    line-height: 30px;\r\n    display: block;\r\n    border: 1px solid #ffb712;\r\n    border-radius: 3px;\r\n    margin-right: 10px;\r\n    color: #ffb712;\r\n    font-size: 15px;\r\n    text-align: center;\r\n    flex: 1;\r\n}\r\n.list {\r\n    margin-right: -18px;\r\n}\r\n.list li:first-child {\r\n    padding-top: 0;\r\n}\r\n.list li {\r\n    position: relative;\r\n    padding: 15px 18px 15px 0;\r\n    word-wrap: break-word;\r\n    overflow: hidden;\r\n}\r\n.comment-list li .desc {\r\n    font-size: 0;\r\n    line-height: normal;\r\n    margin: 0 0 11px;\r\n    color: #494949;\r\n    position: relative;\r\n}\r\n.comment-list li p {\r\n    padding: 0 0 0 40px;\r\n    line-height: 22px;\r\n    color: #494949;\r\n}\r\n.list a {\r\n    display: block;\r\n    overflow: hidden;\r\n    text-decoration: none;\r\n    color: #494949;\r\n}\r\n.list li .desc>a {\r\n    display: inline;\r\n}\r\n.comment-list li .desc strong {\r\n    font-size: 15px;\r\n    display: inline-block;\r\n    vertical-align: text-top;\r\n    margin-right: 6px;\r\n}\r\n.comment-list li .desc .date {\r\n    margin-top: 6px;\r\n    font-size: 12px;\r\n    color: #aaa;\r\n}\r\n.comment-list li .desc img, .comment-list li .desc .avatar {\r\n    width: 36px;\r\n    border-radius: 50%;\r\n    vertical-align: text-top;\r\n    margin-right: 10px;\r\n    float: left;\r\n}\r\n.list a {\r\n    color: #494949;\r\n}\r\nh2 {\r\n    color: #aaa;\r\n    margin: 0 0 15px;\r\n    font-size: 15px;\r\n}\r\n\r\n.ic-btn .text {\r\n    color: #ccc;\r\n    margin-left: 3px;\r\n    position: relative;\r\n    left: 0;\r\n    top: -3px;\r\n}\r\n.comment-list li .btn-info {\r\n    height: 22px;\r\n    margin: 10px 0 0 40px;\r\n}\r\n.list li::after {\r\n    left: 0;\r\n    bottom: 0;\r\n    width: 100%;\r\n    height: 1px;\r\n    background: #E8E8E8;\r\n    content: '';\r\n    position: absolute;\r\n}\r\n.ic-btn {\r\n    display: inline-block;\r\n    margin-right: 20px;\r\n    font-size: 14px;\r\n    cursor: pointer;\r\n}\r\n.ic-btn i{\r\n    width:20px;\r\n    height:20px;\r\n    background-position: center center;\r\n    background-repeat: no-repeat;\r\n    display: inline-block;\r\n    margin-bottom: -2px;\r\n}\r\n.items {\r\n    font-size: 0;\r\n    white-space: nowrap;\r\n    overflow-x: auto;\r\n}\r\n.item__celebrity:first-child {\r\n    margin-left: 0;\r\n}\r\n.item__celebrity {\r\n    font-size: 14px;\r\n    width: 75px;\r\n}\r\n.item a {\r\n    color: #111;\r\n    display:block;\r\n}\r\n.item-poster {\r\n    width: 100%;\r\n    overflow: hidden;\r\n    background-size: cover;\r\n    background-position: center;\r\n}\r\n.item__celebrity .item-title {\r\n    overflow: hidden;\r\n    font-size: 14px;\r\n    line-height: 1.5;\r\n    white-space: normal;\r\n    text-align: center;\r\n    color: #494949;\r\n    margin-top: 8px;\r\n    display:block;\r\n}\r\n.item__celebrity .item-title.role {\r\n    color: #aaa;\r\n}\r\n.item {\r\n    display: inline-block;\r\n    vertical-align: top;\r\n}\r\n.item__celebrity {\r\n    width: 75px;\r\n}\r\n.items>* {\r\n    font-size: .94rem;\r\n    white-space: normal;\r\n}\r\n.item {\r\n    margin-left: 0.48rem;\r\n}\r\nsection {\r\n    margin-bottom: 30px;\r\n}\r\n.item-poster:before {\r\n    content: \"\";\r\n    float: left;\r\n    margin-top: 142.85714%;\r\n}\r\n</style>"],"sourceRoot":""}]);
+
+// exports
+
+
+/***/ }),
+/* 25 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+
+exports.default = {
+    data: function data() {
+        return {
+            id: '',
+            interests: [],
+            total: 0,
+            credits: []
+        };
+    },
+
+    methods: {
+        load: function load() {
+            var self = this;
+            $.ajax({
+                type: 'get',
+                url: 'https://m.douban.com/rexxar/api/v2/movie/' + self.id + '/interests?count=4&order_by=hot&start=0&ck=DQxl&for_mobile=1',
+                dataType: 'jsonp',
+                success: function success(data) {
+                    self.total = data.total;
+                    self.interests = data.interests;
+
+                    console.log(data);
+                }
+            });
+        },
+        loadCredits: function loadCredits() {
+            var self = this;
+            $.ajax({
+                type: 'get',
+                url: 'https://m.douban.com/rexxar/api/v2/movie/' + self.id + '/credits',
+
+                dataType: 'jsonp',
+                success: function success(data) {
+                    self.credits = data.credits[1].celebrities;
+                    console.log(data.credits);
+                }
+            });
+        }
+    },
+    mounted: function mounted(data) {
+        var idarr = window.location.hash.split('/');
+        this.id = idarr[idarr.length - 1];
+        console.log(this.id);
+        this.load();
+        this.loadCredits();
+    }
+};
+
+/***/ }),
+/* 26 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+var render = function() {
+  var _vm = this
+  var _h = _vm.$createElement
+  var _c = _vm._self._c || _h
+  return _c("div", { staticClass: "dbMovieDetail" }, [
+    _c("div", { staticClass: "page" }, [
+      _vm._m(0),
+      _vm._v(" "),
+      _c("div", { staticClass: "card" }, [
+        _vm._m(1),
+        _vm._v(" "),
+        _c("section", { attrs: { id: "celebrities" } }, [
+          _vm._m(2),
+          _vm._v(" "),
+          _c("div", { staticClass: "section-content" }, [
+            _c(
+              "ul",
+              { staticClass: "row items" },
+              _vm._l(_vm.credits, function(c) {
+                return _c("li", { staticClass: "item item__celebrity" }, [
+                  _c(
+                    "a",
+                    {
+                      attrs: {
+                        href: "https://movie.douban.com/celebrity/1350407/"
+                      }
+                    },
+                    [
+                      _c("div", {
+                        staticClass: "item-poster",
+                        style: "background-image: url(" + c.cover_url + ")"
+                      }),
+                      _vm._v(" "),
+                      _c("span", { staticClass: "item-title name" }, [
+                        _vm._v(_vm._s(c.name))
+                      ]),
+                      _vm._v(" "),
+                      _c("span", { staticClass: "item-title role" }, [
+                        _vm._v(_vm._s(c.roles[0]))
+                      ])
+                    ]
+                  )
+                ])
+              })
+            )
+          ])
+        ]),
+        _vm._v(" "),
+        _c("section", { staticClass: "subject-comments" }, [
+          _c("h2", [_vm._v("的短评(" + _vm._s(_vm.total) + ")")]),
+          _vm._v(" "),
+          _c("div", { staticClass: "bd", attrs: { id: "comment-list" } }, [
+            _c(
+              "ul",
+              {
+                staticClass: "list comment-list",
+                attrs: { "data-reactroot": "" }
+              },
+              _vm._l(_vm.interests, function(i) {
+                return _c("li", {}, [
+                  _c("div", { staticClass: "desc" }, [
+                    _c("a", { attrs: { href: "/people/151784886/" } }, [
+                      _c("img", { attrs: { src: i.user.avatar, alt: "辣眼看电视" } })
+                    ]),
+                    _c("div", { staticClass: "user-info" }, [
+                      _c("strong", [_vm._v(_vm._s(i.user.name))]),
+                      _vm._v(" "),
+                      _vm._m(3, true),
+                      _vm._v(" "),
+                      _c("div", { staticClass: "date" }, [
+                        _vm._v(_vm._s(i.create_time))
+                      ])
+                    ])
+                  ]),
+                  _vm._v(" "),
+                  _c("p", [_vm._v(_vm._s(i.comment))]),
+                  _c("div", { staticClass: "btn-info" }, [
+                    _c("div", { staticClass: "ic-btn ic-btn-like  left " }, [
+                      _c("i", {
+                        staticStyle: {
+                          "background-image":
+                            "url(https://img3.doubanio.com/f/talion/7a0756b3b6e67b59ea88653bc0cfa14f61ff219d/pics/card/ic_like_gray.svg)"
+                        }
+                      }),
+                      _c("span", { staticClass: "text" }, [
+                        _vm._v(_vm._s(i.vote_count))
+                      ])
+                    ]),
+                    _vm._v(" "),
+                    _c("div", { staticClass: "ic-btn ic-btn-more right" })
+                  ])
+                ])
+              })
+            )
+          ])
+        ])
+      ])
+    ])
+  ])
+}
+var staticRenderFns = [
+  function() {
+    var _vm = this
+    var _h = _vm.$createElement
+    var _c = _vm._self._c || _h
+    return _c(
+      "section",
+      {
+        staticClass: "promo_top_banner",
+        staticStyle: { display: "block !important" }
+      },
+      [
+        _c("div", { staticClass: "banner_bg" }, [
+          _c("img", {
+            staticClass: "img",
+            attrs: {
+              src:
+                "https://img3.doubanio.com/f/talion/fbcb08987a36258354c6037211d94286bef9716c/pics/card/promotion_bg.jpg"
+            }
+          })
+        ]),
+        _vm._v(" "),
+        _c("div", { staticClass: "banner_wrapper" }, [
+          _c("div", { staticClass: "banner_inner" }, [
+            _c("div", { staticClass: "promo_title" }, [
+              _c("span", { staticClass: "promo_title_text" }, [
+                _vm._v("用 App 打开")
+              ]),
+              _c("br"),
+              _vm._v(" "),
+              _c("span", { staticClass: "promo_title_text" }, [
+                _vm._v("查看主演的其它电影")
+              ])
+            ]),
+            _vm._v(" "),
+            _c("div", { staticClass: "button_wrapper" }, [
+              _c(
+                "a",
+                {
+                  staticClass: "promo_button download_app",
+                  attrs: {
+                    href:
+                      "https://www.douban.com/doubanapp/app?model=B&copy=1&page=movie&channel=card_movie&direct_dl=1",
+                    rel: "nofollow",
+                    onclick:
+                      "ga('send', 'event', 'ios', 'click', 'subject banner download')"
+                  }
+                },
+                [_vm._v("极速下载")]
+              ),
+              _vm._v(" "),
+              _c(
+                "a",
+                {
+                  staticClass: "promo_button open_app",
+                  attrs: {
+                    href:
+                      "https://www.douban.com/doubanapp/dispatch?from=mdouban&download=1&model=B&copy=1&page=movie&channel=card_movie&uri=%2Fmovie%2F27038183",
+                    rel: "nofollow",
+                    onclick:
+                      "ga('send', 'event', 'ios', 'click', 'card more link')"
+                  }
+                },
+                [_vm._v("打开")]
+              )
+            ])
+          ])
+        ])
+      ]
+    )
+  },
+  function() {
+    var _vm = this
+    var _h = _vm.$createElement
+    var _c = _vm._self._c || _h
+    return _c(
+      "section",
+      {
+        staticClass: "subject-mark",
+        attrs: { "data-type": "movie", "data-id": "27038183" }
+      },
+      [
+        _c("div", { staticClass: "mark-item" }, [
+          _c(
+            "a",
+            {
+              attrs: {
+                href: "javascript:;",
+                rel: "nofollow",
+                name: "pbtn-27038183-wish"
+              }
+            },
+            [_c("span", [_vm._v("想看")])]
+          ),
+          _vm._v(" "),
+          _c(
+            "a",
+            {
+              attrs: {
+                href: "javascript:;",
+                rel: "nofollow",
+                name: "pbtn-27038183-collect"
+              }
+            },
+            [_c("span", [_vm._v("看过")])]
+          )
+        ])
+      ]
+    )
+  },
+  function() {
+    var _vm = this
+    var _h = _vm.$createElement
+    var _c = _vm._self._c || _h
+    return _c("header", [_c("h2", [_vm._v("影人")])])
+  },
+  function() {
+    var _vm = this
+    var _h = _vm.$createElement
+    var _c = _vm._self._c || _h
+    return _c(
+      "span",
+      { staticClass: "rating-stars", attrs: { "data-rating": "4" } },
+      [
+        _c("span", { staticClass: "rating-star rating-star-medium-full" }),
+        _vm._v(" "),
+        _c("span", { staticClass: "rating-star rating-star-medium-full" }),
+        _c("span", { staticClass: "rating-star rating-star-medium-full" }),
+        _vm._v(" "),
+        _c("span", { staticClass: "rating-star rating-star-medium-full" }),
+        _c("span", { staticClass: "rating-star rating-star-medium-gray" })
+      ]
+    )
+  }
+]
+render._withStripped = true
+var esExports = { render: render, staticRenderFns: staticRenderFns }
+/* harmony default export */ __webpack_exports__["a"] = (esExports);
+if (false) {
+  module.hot.accept()
+  if (module.hot.data) {
+    require("vue-hot-reload-api")      .rerender("data-v-dd06c7f4", esExports)
+  }
+}
+
+/***/ }),
+/* 27 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbRadio_vue__ = __webpack_require__(30);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbRadio_vue___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbRadio_vue__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_vue_loader_lib_template_compiler_index_id_data_v_63925dc0_hasScoped_true_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_bustCache_dbRadio_vue__ = __webpack_require__(31);
+var disposed = false
+function injectStyle (ssrContext) {
+  if (disposed) return
+  __webpack_require__(28)
+}
+var normalizeComponent = __webpack_require__(2)
+/* script */
+
+/* template */
+
+/* template functional */
+  var __vue_template_functional__ = false
+/* styles */
+var __vue_styles__ = injectStyle
+/* scopeId */
+var __vue_scopeId__ = "data-v-63925dc0"
+/* moduleIdentifier (server only) */
+var __vue_module_identifier__ = null
+var Component = normalizeComponent(
+  __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbRadio_vue___default.a,
+  __WEBPACK_IMPORTED_MODULE_1__node_modules_vue_loader_lib_template_compiler_index_id_data_v_63925dc0_hasScoped_true_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_bustCache_dbRadio_vue__["a" /* default */],
+  __vue_template_functional__,
+  __vue_styles__,
+  __vue_scopeId__,
+  __vue_module_identifier__
+)
+Component.options.__file = "components\\lantao\\dbRadio.vue"
+if (Component.esModule && Object.keys(Component.esModule).some(function (key) {  return key !== "default" && key.substr(0, 2) !== "__"})) {  console.error("named exports are not supported in *.vue files.")}
+
+/* hot reload */
+if (false) {(function () {
+  var hotAPI = require("vue-hot-reload-api")
+  hotAPI.install(require("vue"), false)
+  if (!hotAPI.compatible) return
+  module.hot.accept()
+  if (!module.hot.data) {
+    hotAPI.createRecord("data-v-63925dc0", Component.options)
+  } else {
+    hotAPI.reload("data-v-63925dc0", Component.options)
+  }
+  module.hot.dispose(function (data) {
+    disposed = true
+  })
+})()}
+
+/* harmony default export */ __webpack_exports__["default"] = (Component.exports);
+
+
+/***/ }),
+/* 28 */
+/***/ (function(module, exports, __webpack_require__) {
+
+// style-loader: Adds some css to the DOM by adding a <style> tag
+
+// load the styles
+var content = __webpack_require__(29);
+if(typeof content === 'string') content = [[module.i, content, '']];
+if(content.locals) module.exports = content.locals;
+// add the styles to the DOM
+var update = __webpack_require__(1)("6ebf97ba", content, false);
+// Hot Module Replacement
+if(false) {
+ // When the styles change, update the <style> tags
+ if(!content.locals) {
+   module.hot.accept("!!../../node_modules/css-loader/index.js?sourceMap!../../node_modules/vue-loader/lib/style-compiler/index.js?{\"vue\":true,\"id\":\"data-v-63925dc0\",\"scoped\":true,\"hasInlineConfig\":false}!../../node_modules/vue-loader/lib/selector.js?type=styles&index=0&bustCache!./dbRadio.vue", function() {
+     var newContent = require("!!../../node_modules/css-loader/index.js?sourceMap!../../node_modules/vue-loader/lib/style-compiler/index.js?{\"vue\":true,\"id\":\"data-v-63925dc0\",\"scoped\":true,\"hasInlineConfig\":false}!../../node_modules/vue-loader/lib/selector.js?type=styles&index=0&bustCache!./dbRadio.vue");
+     if(typeof newContent === 'string') newContent = [[module.id, newContent, '']];
+     update(newContent);
+   });
+ }
+ // When the module is disposed, remove the <style> tags
+ module.hot.dispose(function() { update(); });
+}
+
+/***/ }),
+/* 29 */
+/***/ (function(module, exports, __webpack_require__) {
+
+exports = module.exports = __webpack_require__(0)(true);
+// imports
+
+
+// module
+exports.push([module.i, "\n.promo_top_banner+.card[data-v-63925dc0] {\r\n    margin-top: 0px;\n}\n.card[data-v-63925dc0]{\r\n    margin: 0 18px;\n}\n.pull-refresh-container[data-v-63925dc0] {\r\n    position: relative;\n}\n.status-editor-bar[data-v-63925dc0] {\r\n    position: relative;\r\n    margin: 0 -18px 5px;\r\n    padding: 10px 18px;\r\n    cursor: pointer;\r\n    overflow: hidden;\n}\n.pull-refresh-loading[data-v-63925dc0] {\r\n    /*background: url(/f/talion/bf2ef8c…/pics/card/loading_grey.gif) no-repeat;*/\r\n    background-position: center;\r\n    background-size: 24px;\r\n    width: 100%;\r\n    height: 48px;\r\n    z-index: -1;\r\n    position: absolute;\r\n    left: 0;\r\n    top: 60px;\r\n    opacity: 0;\n}\n.status-list[data-v-63925dc0] {\r\n    overflow: hidden;\n}\n.status-list li[data-v-63925dc0] {\r\n    position: relative;\r\n    padding-bottom: 20px;\r\n    margin-top: 20px;\r\n    margin-bottom: 20px;\r\n    padding-left: 50px;\n}\n.status-list li .desc[data-v-63925dc0] {\r\n    margin-left: -50px;\r\n    display: flex;\r\n        font-size: 0;\r\n    line-height: normal;\r\n    margin: 0 0 11px;\r\n    color: #494949;\r\n    position: relative;\r\n    align-items: center;\n}\na[data-v-63925dc0] {\r\n    color: #42bd56;\r\n    text-decoration: none;\n}\n.status-list li .desc img[data-v-63925dc0] {\r\n    width: 40px;\r\n    height: 40px;\r\n    margin-right: 10px;\n}\n.comment-list li .desc img[data-v-63925dc0], .comment-list li .desc .avatar[data-v-63925dc0] {\r\n    border-radius: 50%;\r\n    vertical-align: text-top;\n}\n.status-list li .desc .user-info[data-v-63925dc0] {\r\n    flex: auto;\n}\n.status-list li .content[data-v-63925dc0] {\r\n    font-size: 17px;\n}\n.comment-list li .content[data-v-63925dc0] {\r\n    padding-left: 0;\r\n    margin-top: 10px;\r\n    line-height: 22px;\r\n    color: #494949;\n}\n.status-list li .content>div[data-v-63925dc0] {\r\n    display: inline;\n}\n.feed-images[data-v-63925dc0] {\r\n    margin-top: 15px;\n}\n.feed-images.single .item[data-v-63925dc0] {\r\n    display: inline-block;\r\n    max-height: 300px;\r\n    overflow: hidden;\n}\n.feed-images.single .item img[data-v-63925dc0] {\r\n    display: block;\n}\n.comment-list li .info[data-v-63925dc0] {\r\n    padding-left: 0;\r\n    margin-top: 13px;\r\n    margin-right: -20px;\r\n    overflow: auto;\n}\n.status-list li[data-v-63925dc0]::after {\r\n    left: 0;\r\n    bottom: 0;\r\n    width: 100%;\r\n    height: 1px;\r\n    background: #E8E8E8;\r\n    content: '';\r\n    position: absolute;\n}\n.comment-list li[data-v-63925dc0]::before, .comment-list li[data-v-63925dc0]::after {\r\n    margin-left: 46px;\n}\n.ic-btn.left[data-v-63925dc0] {\r\n    float: left;\n}\n.ic-btn[data-v-63925dc0] {\r\n    display: inline-block;\r\n    margin-right: 20px;\r\n    font-size: 14px;\r\n    cursor: pointer;\n}\n.ic-btn i[data-v-63925dc0]{\r\n    width: 20px;\r\n    height: 20px;\r\n    background-position: center center;\r\n    background-repeat: no-repeat;\r\n    display: inline-block;\r\n    margin-bottom: -2px;\n}\n.ic-btn-like[data-v-63925dc0]::before {\r\n    /*background-image: url(/f/talion/7a0756b…/pics/card/ic_like_gray.svg);*/\n}\n.ic-btn .text[data-v-63925dc0] {\r\n    color: #ccc;\r\n    margin-left: 3px;\r\n    position: relative;\r\n    left: 0;\r\n    top: -3px;\n}\n.ic-btn.left[data-v-63925dc0] {\r\n    float: left;\n}\n.ic-btn.right[data-v-63925dc0] {\r\n    float: right;\n}\n.status-editor-bar .avatar img[data-v-63925dc0] {\r\n    width: 100%;\r\n    height: 100%;\r\n    border-radius: 50%;\n}\n.status-editor-bar .avatar[data-v-63925dc0] {\r\n    width: 40px;\r\n    height: 40px;\r\n    float: left;\n}\n.status-editor-bar .holder[data-v-63925dc0] {\r\n    color: #aaa;\r\n    padding-left: 10px;\r\n    font-size: 15px;\r\n    line-height: 40px;\r\n    float: left;\n}\nhtml body .page[data-v-63925dc0] {\r\n    position: fixed;\r\n    left: 0;\r\n    top: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    box-sizing: border-box;\r\n    overflow-x: hidden;\r\n    overflow-y: scroll;\n}\n.status-list li .desc[data-v-63925dc0] {\r\n    margin-left: -50px;\n}\n.status-list li .desc .user-info strong[data-v-63925dc0] {\r\n    font-size: 17px;\r\n    line-height: 1;\r\n    color: #494949;\n}\n.comment-list li .desc .user-info strong[data-v-63925dc0] {\r\n    display: inline-block;\r\n    vertical-align: text-top;\r\n    margin-right: 6px;\n}\n.status-list li .desc .user-info strong span[data-v-63925dc0] {\r\n    color: #aaa;\r\n    font-weight: normal;\n}\n.status-list li .desc .user-info .timestamp[data-v-63925dc0] {\r\n    font-size: 14px;\r\n    margin-top: 6px;\r\n    line-height: 1;\r\n        color: #aaa;\n}\n.feed-images.single .item.portrait img[data-v-63925dc0] {\r\n    max-width: 100%;\n}\n.feed-images .item[data-v-63925dc0] {\r\n    position: relative;\r\n    cursor: pointer;\r\n    overflow:hidden;\n}\n.status-editor-bar .icon[data-v-63925dc0] {\r\n    width: 24px;\r\n    height: 24px;\r\n    padding: 8px;\r\n    margin-right: 10px;\r\n    position: relative;\r\n    float: right;\r\n    box-sizing: border-box;\r\n    margin-top:7px;\n}\n.status-editor-bar .icon.icon-camera[data-v-63925dc0] {\r\n    margin-right: 0;\n}\n.status-editor-bar .icon.icon-pen[data-v-63925dc0]{\r\n    margin-right: 32px;\n}\n.status-editor-bar[data-v-63925dc0]::after {\r\n    left: 0;\r\n    bottom: 0;\r\n    width: 100%;\r\n    height: 1px;\r\n    background: #E8E8E8;\r\n    content: '';\r\n    position: absolute;\n}\n.feed-card[data-v-63925dc0] {\r\n    padding: 15px;\r\n    margin: 10px 0 20px;\r\n    border-radius: 2px;\r\n    background: #f9f9f9;\n}\n.feed-card .title[data-v-63925dc0] {\r\n    font-size: 17px;\r\n    font-weight: 500;\r\n    line-height: 1.4;\r\n    color: #494949;\r\n    margin-bottom: 5px;\r\n    overflow: hidden;\r\n    text-overflow: ellipsis;\n}\n.feed-card .text[data-v-63925dc0] {\r\n    font-size: 12px;\r\n    line-height: 16px;\r\n    color: #aaa;\r\n    overflow: hidden;\r\n    text-overflow: ellipsis;\n}\n.has-cover .cover[data-v-63925dc0] {\r\n    width: 75px;\r\n    height: 48px;\r\n    background-size: cover;\r\n    background-position: center;\r\n    background-repeat: no-repeat;\r\n    position: absolute;\r\n    top: 0;\r\n    right: 0;\n}\n.has-cover[data-v-63925dc0]{\r\n    height: 48px;\r\n    padding-right: 90px;\r\n    position: relative;\n}\n.feed-images img[data-v-63925dc0]{\r\n    width: 93px;\r\n    height: 93px;\n}\n.feed-images .big[data-v-63925dc0]{\r\n    width: 100%;\r\n    height: 100%;\n}\r\n", "", {"version":3,"sources":["C:/Users/Administrator/Desktop/douban/douBanSix/components/lantao/components/lantao/dbRadio.vue?a0639540"],"names":[],"mappings":";AA2KA;IACA,gBAAA;CACA;AACA;IACA,eAAA;CACA;AACA;IACA,mBAAA;CACA;AACA;IACA,mBAAA;IACA,oBAAA;IACA,mBAAA;IACA,gBAAA;IACA,iBAAA;CACA;AACA;IACA,6EAAA;IACA,4BAAA;IACA,sBAAA;IACA,YAAA;IACA,aAAA;IACA,YAAA;IACA,mBAAA;IACA,QAAA;IACA,UAAA;IACA,WAAA;CACA;AACA;IACA,iBAAA;CACA;AACA;IACA,mBAAA;IACA,qBAAA;IACA,iBAAA;IACA,oBAAA;IACA,mBAAA;CACA;AACA;IACA,mBAAA;IACA,cAAA;QACA,aAAA;IACA,oBAAA;IACA,iBAAA;IACA,eAAA;IACA,mBAAA;IACA,oBAAA;CACA;AACA;IACA,eAAA;IACA,sBAAA;CACA;AACA;IACA,YAAA;IACA,aAAA;IACA,mBAAA;CACA;AACA;IACA,mBAAA;IACA,yBAAA;CACA;AACA;IACA,WAAA;CACA;AACA;IACA,gBAAA;CACA;AACA;IACA,gBAAA;IACA,iBAAA;IACA,kBAAA;IACA,eAAA;CACA;AACA;IACA,gBAAA;CACA;AACA;IACA,iBAAA;CACA;AACA;IACA,sBAAA;IACA,kBAAA;IACA,iBAAA;CACA;AACA;IACA,eAAA;CACA;AACA;IACA,gBAAA;IACA,iBAAA;IACA,oBAAA;IACA,eAAA;CACA;AACA;IACA,QAAA;IACA,UAAA;IACA,YAAA;IACA,YAAA;IACA,oBAAA;IACA,YAAA;IACA,mBAAA;CACA;AACA;IACA,kBAAA;CACA;AACA;IACA,YAAA;CACA;AACA;IACA,sBAAA;IACA,mBAAA;IACA,gBAAA;IACA,gBAAA;CACA;AACA;IACA,YAAA;IACA,aAAA;IACA,mCAAA;IACA,6BAAA;IACA,sBAAA;IACA,oBAAA;CACA;AACA;IACA,yEAAA;CACA;AACA;IACA,YAAA;IACA,iBAAA;IACA,mBAAA;IACA,QAAA;IACA,UAAA;CACA;AACA;IACA,YAAA;CACA;AACA;IACA,aAAA;CACA;AAEA;IACA,YAAA;IACA,aAAA;IACA,mBAAA;CACA;AACA;IACA,YAAA;IACA,aAAA;IACA,YAAA;CACA;AACA;IACA,YAAA;IACA,mBAAA;IACA,gBAAA;IACA,kBAAA;IACA,YAAA;CACA;AACA;IACA,gBAAA;IACA,QAAA;IACA,OAAA;IACA,UAAA;IACA,SAAA;IACA,YAAA;IACA,aAAA;IACA,uBAAA;IACA,mBAAA;IACA,mBAAA;CACA;AACA;IACA,mBAAA;CACA;AACA;IACA,gBAAA;IACA,eAAA;IACA,eAAA;CACA;AACA;IACA,sBAAA;IACA,yBAAA;IACA,kBAAA;CACA;AACA;IACA,YAAA;IACA,oBAAA;CACA;AACA;IACA,gBAAA;IACA,gBAAA;IACA,eAAA;QACA,YAAA;CACA;AACA;IACA,gBAAA;CACA;AACA;IACA,mBAAA;IACA,gBAAA;IACA,gBAAA;CACA;AACA;IACA,YAAA;IACA,aAAA;IACA,aAAA;IACA,mBAAA;IACA,mBAAA;IACA,aAAA;IACA,uBAAA;IACA,eAAA;CACA;AACA;IACA,gBAAA;CACA;AACA;IACA,mBAAA;CACA;AACA;IACA,QAAA;IACA,UAAA;IACA,YAAA;IACA,YAAA;IACA,oBAAA;IACA,YAAA;IACA,mBAAA;CACA;AACA;IACA,cAAA;IACA,oBAAA;IACA,mBAAA;IACA,oBAAA;CACA;AACA;IACA,gBAAA;IACA,iBAAA;IACA,iBAAA;IACA,eAAA;IACA,mBAAA;IACA,iBAAA;IACA,wBAAA;CACA;AACA;IACA,gBAAA;IACA,kBAAA;IACA,YAAA;IACA,iBAAA;IACA,wBAAA;CACA;AACA;IACA,YAAA;IACA,aAAA;IACA,uBAAA;IACA,4BAAA;IACA,6BAAA;IACA,mBAAA;IACA,OAAA;IACA,SAAA;CACA;AACA;IACA,aAAA;IACA,oBAAA;IACA,mBAAA;CACA;AACA;IACA,YAAA;IACA,aAAA;CACA;AACA;IACA,YAAA;IACA,aAAA;CACA","file":"dbRadio.vue","sourcesContent":["<template>\r\n    <div class=\"dbRadio\">\r\n        <div class=\"page\">\r\n            <div class=\"card\">\r\n                <div data-reactroot=\"\" class=\"pull-refresh-container\">\r\n                    <div class=\"status-editor-bar\">\r\n                        <div class=\"avatar\">\r\n                            <img src=\"https://img1.doubanio.com/icon/user_normal.jpg\">\r\n                        </div>\r\n                            <div class=\"holder\">登录发广播</div>\r\n                            <div class=\"icon icon-camera\" style=\"background-image:url(../svg/ic_status_camera.svg)\"></div>\r\n                            <a class=\"icon icon-pen\" style=\"background-image:url(../svg/ic_status_pen.svg);background-size: contain;background-position: center;background-repeat: no-repeat;\" :href=\"'#/home/sendRadio'\"></a></div>\r\n                    <ul class=\"status-list comment-list\">\r\n                        <li v-for=\"i in item\">\r\n                            <div>\r\n                                <div class=\"desc\">\r\n                                    <a href=\"/people/95805238/\">\r\n                                        <img alt=\"豆瓣\" src=\"https://img3.doubanio.com/icon/up95805238-16.jpg\">\r\n                                    </a>\r\n                                    <a href=\"/people/95805238/status/2045165796/\">\r\n                                        <div class=\"user-info\">\r\n                                            <strong>\r\n                                                {{i.status.author.name}} \r\n                                                <span>{{i.status.activity}}</span>\r\n                                            </strong>\r\n                                            <div class=\"timestamp\">{{i.status.create_time}}</div>\r\n                                        </div>\r\n                                    </a>\r\n                                </div>\r\n                                    <a>\r\n                                        <div class=\"content\">\r\n                                            <div>{{i.status.text}} \r\n                                                <a v-if=\"i.status.entities[0]\" :href=\"i.status.entities[0].uri\">{{i.status.entities[0].title}}</a>\r\n                                            </div>\r\n                                        </div>\r\n                                    </a>\r\n                            </div>\r\n                            <div class=\"feed-images single\" v-if=\"i.status.activity=='说：'\">\r\n                                <div v-if=\"!i.status.images[1]\" class=\"item portrait\" style=\"background-image:url(./radioImage/3VFkZE.jpg);height:300px;width:290px;background-size:290px auto\">\r\n                                </div>\r\n                                \r\n                                <div v-if=\"i.status.images[1]\">\r\n                                    <div class=\"item portrait\" style=\"background-image:url(./radioImage/1cp0vh.jpg);height:92px;width:92px;background-size:92px auto\">\r\n                                    </div>\r\n                                    <div class=\"item portrait\" style=\"background-image:url(./radioImage/1cp0vh.jpg);height:92px;width:92px;background-size:92px auto\">\r\n                                    </div>\r\n                                </div>\r\n                            </div>\r\n                            <div class=\"feed-card article-card  has-subtitle\" v-if=\"i.status.activity=='写了日记'\">\r\n                                <a href=\"https://www.douban.com/note/637408669/\">\r\n                                    <div class=\"title\">{{i.status.card.title}}</div>\r\n                                    <div class=\"detail\" :class=\"{'has-cover':i.status.card.image}\">\r\n                                        <div class=\"text\">{{i.status.card.subtitle}}</div>\r\n                                        <div v-if=\"i.status.card.image\" class=\"cover\" style=\"background-image: url(./radioImage/p44530630.jpg);height:48px;width:75px;background-size:75px auto\"></div>\r\n                                    </div>\r\n                                </a>\r\n                            </div>\r\n                            <div class=\"info\">\r\n                                <div class=\"ic-btn ic-btn-like left\" >\r\n                                    <i :style=\"'background-image:url(./svg/ic_like_gray.svg)'\"></i>\r\n                                    <span class=\"text\">{{i.status.like_count}}</span>\r\n                                </div>\r\n                                <div class=\"ic-btn ic-btn-comment left\">\r\n                                    <i :style=\"'background-image:url(./svg/ic_comment.svg)'\"></i>\r\n                                    <span class=\"text\">{{i.status.comments_count}}</span>\r\n                                </div>\r\n                                <div class=\"ic-btn ic-btn-retweet left\">\r\n                                    <i :style=\"'background-image:url(./svg/ic_retweet_gray.svg)'\"></i>\r\n                                    <span class=\"text\">{{i.status.reshares_count}}</span>\r\n                                </div>\r\n                                <div class=\"ic-btn ic-btn-more right\"></div>\r\n                            </div>\r\n                        </li>\r\n                    </ul>\r\n                </div>\r\n            </div>\r\n            <div class=\"card\" v-if=\"eternal\">\r\n                <ul class=\"status-list comment-list\">\r\n                    <li v-for=\"e in eternal\">\r\n                        <div>\r\n                            <div class=\"desc\">\r\n                                <a href=\"/people/95805238/\">\r\n                                    <img alt=\"豆瓣\" src=\"https://img3.doubanio.com/icon/up95805238-16.jpg\">\r\n                                </a>\r\n                                <a>\r\n                                    <div class=\"user-info\">\r\n                                        <strong>\r\n                                            lmm\r\n                                            <span>说： </span>\r\n                                        </strong>\r\n                                        <div class=\"timestamp\">{{e.time}}</div>\r\n                                    </div>\r\n                                </a>\r\n                                \r\n                            </div>\r\n                            <a href=\"/people/3186129/status/2052193615/\">\r\n                                <div class=\"content\">\r\n                                    <div>{{e.eternal}}</div>\r\n                                </div>\r\n                            </a>\r\n                            <div class=\"feed-images single\">\r\n                                <img v-if=\"e.img[0]\" :src=\"'../addImage/eternal/phone18124092479/' + e.img[0]\" :class=\"{'big':e.img.length<2}\"/>\r\n                                <img v-if=\"e.img[1]\" :src=\"'../addImage/eternal/phone18124092479/' + e.img[1]\"/>\r\n                                <img v-if=\"e.img[2]\" :src=\"'../addImage/eternal/phone18124092479/' + e.img[2]\"/>\r\n                                <img v-if=\"e.img[3]\" :src=\"'../addImage/eternal/phone18124092479/' + e.img[3]\"/>\r\n                                <img v-if=\"e.img[4]\" :src=\"'../addImage/eternal/phone18124092479/' + e.img[4]\"/>\r\n                                <img v-if=\"e.img[5]\" :src=\"'../addImage/eternal/phone18124092479/' + e.img[5]\"/>\r\n                                <img v-if=\"e.img[6]\" :src=\"'../addImage/eternal/phone18124092479/' + e.img[6]\"/>\r\n                                <img v-if=\"e.img[7]\" :src=\"'../addImage/eternal/phone18124092479/' + e.img[7]\"/>\r\n                                <img v-if=\"e.img[8]\" :src=\"'../addImage/eternal/phone18124092479/' + e.img[8]\"/>\r\n                            </div>\r\n                        </div>\r\n\r\n                    </li>\r\n                </ul>\r\n                <div >\r\n                    <!-- {{e.eternal}} -->\r\n                    \r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n</template>\r\n<script>\r\n    export default {\r\n        data(){\r\n            return {\r\n                item:[],\r\n                eternal:[]\r\n            }\r\n        },\r\n        methods:{\r\n            load:function(){\r\n                var self = this;\r\n                $.ajax({\r\n                    url:'https://m.douban.com/rexxar/api/v2/status/anonymous_timeline?max_id=&ck=DQxl&for_mobile=1',\r\n                    type:'get',\r\n                    dataType:'jsonp',\r\n                    success:function(data){\r\n                        if(C.get('eternal')  != ''){\r\n                            self.eternal = JSON.parse(C.get('eternal'));\r\n                            console.log(self.eternal)\r\n                        }else{\r\n                            self.item = data.items;\r\n                        }\r\n\r\n                        // console.log(data);\r\n                        \r\n                        // console.log(self.item[14].status.images[0].normal.url);\r\n                        // console.log(JSON.parse(C.get('eternal')));\r\n                        // console.log(data.items.concat(JSON.parse(C.get('eternal'))));\r\n                    }\r\n                })\r\n            },\r\n            mountedImage:function(){\r\n                console.log(C.get('eternal'));\r\n                // console.log(JSON.parse(C.get('eternal')));\r\n             \r\n            }\r\n        },\r\n        mounted:function(){\r\n            this.load();\r\n            this.mountedImage();\r\n\r\n        },\r\n        components:{\r\n            'download':download\r\n        }\r\n    }\r\n</script>\r\n<style scoped>\r\n.promo_top_banner+.card {\r\n    margin-top: 0px;\r\n}\r\n.card{\r\n    margin: 0 18px;\r\n}\r\n.pull-refresh-container {\r\n    position: relative;\r\n}\r\n.status-editor-bar {\r\n    position: relative;\r\n    margin: 0 -18px 5px;\r\n    padding: 10px 18px;\r\n    cursor: pointer;\r\n    overflow: hidden;\r\n}\r\n.pull-refresh-loading {\r\n    /*background: url(/f/talion/bf2ef8c…/pics/card/loading_grey.gif) no-repeat;*/\r\n    background-position: center;\r\n    background-size: 24px;\r\n    width: 100%;\r\n    height: 48px;\r\n    z-index: -1;\r\n    position: absolute;\r\n    left: 0;\r\n    top: 60px;\r\n    opacity: 0;\r\n}\r\n.status-list {\r\n    overflow: hidden;\r\n}\r\n.status-list li {\r\n    position: relative;\r\n    padding-bottom: 20px;\r\n    margin-top: 20px;\r\n    margin-bottom: 20px;\r\n    padding-left: 50px;\r\n}\r\n.status-list li .desc {\r\n    margin-left: -50px;\r\n    display: flex;\r\n        font-size: 0;\r\n    line-height: normal;\r\n    margin: 0 0 11px;\r\n    color: #494949;\r\n    position: relative;\r\n    align-items: center;\r\n}\r\na {\r\n    color: #42bd56;\r\n    text-decoration: none;\r\n}\r\n.status-list li .desc img {\r\n    width: 40px;\r\n    height: 40px;\r\n    margin-right: 10px;\r\n}\r\n.comment-list li .desc img, .comment-list li .desc .avatar {\r\n    border-radius: 50%;\r\n    vertical-align: text-top;\r\n}\r\n.status-list li .desc .user-info {\r\n    flex: auto;\r\n}\r\n.status-list li .content {\r\n    font-size: 17px;\r\n}\r\n.comment-list li .content {\r\n    padding-left: 0;\r\n    margin-top: 10px;\r\n    line-height: 22px;\r\n    color: #494949;\r\n}\r\n.status-list li .content>div {\r\n    display: inline;\r\n}\r\n.feed-images {\r\n    margin-top: 15px;\r\n}\r\n.feed-images.single .item {\r\n    display: inline-block;\r\n    max-height: 300px;\r\n    overflow: hidden;\r\n}\r\n.feed-images.single .item img {\r\n    display: block;\r\n}\r\n.comment-list li .info {\r\n    padding-left: 0;\r\n    margin-top: 13px;\r\n    margin-right: -20px;\r\n    overflow: auto;\r\n}\r\n.status-list li::after {\r\n    left: 0;\r\n    bottom: 0;\r\n    width: 100%;\r\n    height: 1px;\r\n    background: #E8E8E8;\r\n    content: '';\r\n    position: absolute;\r\n}\r\n.comment-list li::before, .comment-list li::after {\r\n    margin-left: 46px;\r\n}\r\n.ic-btn.left {\r\n    float: left;\r\n}\r\n.ic-btn {\r\n    display: inline-block;\r\n    margin-right: 20px;\r\n    font-size: 14px;\r\n    cursor: pointer;\r\n}\r\n.ic-btn i{\r\n    width: 20px;\r\n    height: 20px;\r\n    background-position: center center;\r\n    background-repeat: no-repeat;\r\n    display: inline-block;\r\n    margin-bottom: -2px;\r\n}\r\n.ic-btn-like::before {\r\n    /*background-image: url(/f/talion/7a0756b…/pics/card/ic_like_gray.svg);*/\r\n}\r\n.ic-btn .text {\r\n    color: #ccc;\r\n    margin-left: 3px;\r\n    position: relative;\r\n    left: 0;\r\n    top: -3px;\r\n}\r\n.ic-btn.left {\r\n    float: left;\r\n}\r\n.ic-btn.right {\r\n    float: right;\r\n}\r\n\r\n.status-editor-bar .avatar img {\r\n    width: 100%;\r\n    height: 100%;\r\n    border-radius: 50%;\r\n}\r\n.status-editor-bar .avatar {\r\n    width: 40px;\r\n    height: 40px;\r\n    float: left;\r\n}\r\n.status-editor-bar .holder {\r\n    color: #aaa;\r\n    padding-left: 10px;\r\n    font-size: 15px;\r\n    line-height: 40px;\r\n    float: left;\r\n}\r\nhtml body .page {\r\n    position: fixed;\r\n    left: 0;\r\n    top: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    box-sizing: border-box;\r\n    overflow-x: hidden;\r\n    overflow-y: scroll;\r\n}\r\n.status-list li .desc {\r\n    margin-left: -50px;\r\n}\r\n.status-list li .desc .user-info strong {\r\n    font-size: 17px;\r\n    line-height: 1;\r\n    color: #494949;\r\n}\r\n.comment-list li .desc .user-info strong {\r\n    display: inline-block;\r\n    vertical-align: text-top;\r\n    margin-right: 6px;\r\n}\r\n.status-list li .desc .user-info strong span {\r\n    color: #aaa;\r\n    font-weight: normal;\r\n}\r\n.status-list li .desc .user-info .timestamp {\r\n    font-size: 14px;\r\n    margin-top: 6px;\r\n    line-height: 1;\r\n        color: #aaa;\r\n}\r\n.feed-images.single .item.portrait img {\r\n    max-width: 100%;\r\n}\r\n.feed-images .item {\r\n    position: relative;\r\n    cursor: pointer;\r\n    overflow:hidden;\r\n}\r\n.status-editor-bar .icon {\r\n    width: 24px;\r\n    height: 24px;\r\n    padding: 8px;\r\n    margin-right: 10px;\r\n    position: relative;\r\n    float: right;\r\n    box-sizing: border-box;\r\n    margin-top:7px;\r\n}\r\n.status-editor-bar .icon.icon-camera {\r\n    margin-right: 0;\r\n}\r\n.status-editor-bar .icon.icon-pen{\r\n    margin-right: 32px;\r\n}\r\n.status-editor-bar::after {\r\n    left: 0;\r\n    bottom: 0;\r\n    width: 100%;\r\n    height: 1px;\r\n    background: #E8E8E8;\r\n    content: '';\r\n    position: absolute;\r\n}\r\n.feed-card {\r\n    padding: 15px;\r\n    margin: 10px 0 20px;\r\n    border-radius: 2px;\r\n    background: #f9f9f9;\r\n}\r\n.feed-card .title {\r\n    font-size: 17px;\r\n    font-weight: 500;\r\n    line-height: 1.4;\r\n    color: #494949;\r\n    margin-bottom: 5px;\r\n    overflow: hidden;\r\n    text-overflow: ellipsis;\r\n}\r\n.feed-card .text {\r\n    font-size: 12px;\r\n    line-height: 16px;\r\n    color: #aaa;\r\n    overflow: hidden;\r\n    text-overflow: ellipsis;\r\n}\r\n.has-cover .cover {\r\n    width: 75px;\r\n    height: 48px;\r\n    background-size: cover;\r\n    background-position: center;\r\n    background-repeat: no-repeat;\r\n    position: absolute;\r\n    top: 0;\r\n    right: 0;\r\n}\r\n.has-cover{\r\n    height: 48px;\r\n    padding-right: 90px;\r\n    position: relative;\r\n}\r\n.feed-images img{\r\n    width: 93px;\r\n    height: 93px;\r\n}\r\n.feed-images .big{\r\n    width: 100%;\r\n    height: 100%;\r\n}\r\n</style>"],"sourceRoot":""}]);
+
+// exports
+
+
+/***/ }),
+/* 30 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+
+exports.default = {
+    data: function data() {
+        return {
+            item: [],
+            eternal: []
+        };
+    },
+
+    methods: {
+        load: function load() {
+            var self = this;
+            $.ajax({
+                url: 'https://m.douban.com/rexxar/api/v2/status/anonymous_timeline?max_id=&ck=DQxl&for_mobile=1',
+                type: 'get',
+                dataType: 'jsonp',
+                success: function success(data) {
+                    if (C.get('eternal') != '') {
+                        self.eternal = JSON.parse(C.get('eternal'));
+                        console.log(self.eternal);
+                    } else {
+                        self.item = data.items;
+                    }
+
+                    // console.log(data);
+
+                    // console.log(self.item[14].status.images[0].normal.url);
+                    // console.log(JSON.parse(C.get('eternal')));
+                    // console.log(data.items.concat(JSON.parse(C.get('eternal'))));
+                }
+            });
+        },
+        mountedImage: function mountedImage() {
+            console.log(C.get('eternal'));
+            // console.log(JSON.parse(C.get('eternal')));
+        }
+    },
+    mounted: function mounted() {
+        this.load();
+        this.mountedImage();
+    },
+    components: {
+        'download': download
+    }
+};
+
+/***/ }),
+/* 31 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+var render = function() {
+  var _vm = this
+  var _h = _vm.$createElement
+  var _c = _vm._self._c || _h
+  return _c("div", { staticClass: "dbRadio" }, [
+    _c("div", { staticClass: "page" }, [
+      _c("div", { staticClass: "card" }, [
+        _c(
+          "div",
+          {
+            staticClass: "pull-refresh-container",
+            attrs: { "data-reactroot": "" }
+          },
+          [
+            _c("div", { staticClass: "status-editor-bar" }, [
+              _vm._m(0),
+              _vm._v(" "),
+              _c("div", { staticClass: "holder" }, [_vm._v("登录发广播")]),
+              _vm._v(" "),
+              _c("div", {
+                staticClass: "icon icon-camera",
+                staticStyle: {
+                  "background-image": "url(../svg/ic_status_camera.svg)"
+                }
+              }),
+              _vm._v(" "),
+              _c("a", {
+                staticClass: "icon icon-pen",
+                staticStyle: {
+                  "background-image": "url(../svg/ic_status_pen.svg)",
+                  "background-size": "contain",
+                  "background-position": "center",
+                  "background-repeat": "no-repeat"
+                },
+                attrs: { href: "#/home/sendRadio" }
+              })
+            ]),
+            _vm._v(" "),
+            _c(
+              "ul",
+              { staticClass: "status-list comment-list" },
+              _vm._l(_vm.item, function(i) {
+                return _c("li", [
+                  _c("div", [
+                    _c("div", { staticClass: "desc" }, [
+                      _vm._m(1, true),
+                      _vm._v(" "),
+                      _c(
+                        "a",
+                        {
+                          attrs: { href: "/people/95805238/status/2045165796/" }
+                        },
+                        [
+                          _c("div", { staticClass: "user-info" }, [
+                            _c("strong", [
+                              _vm._v(
+                                "\n                                            " +
+                                  _vm._s(i.status.author.name) +
+                                  " \n                                            "
+                              ),
+                              _c("span", [_vm._v(_vm._s(i.status.activity))])
+                            ]),
+                            _vm._v(" "),
+                            _c("div", { staticClass: "timestamp" }, [
+                              _vm._v(_vm._s(i.status.create_time))
+                            ])
+                          ])
+                        ]
+                      )
+                    ]),
+                    _vm._v(" "),
+                    _c("a", [
+                      _c("div", { staticClass: "content" }, [
+                        _c("div", [
+                          _vm._v(
+                            _vm._s(i.status.text) +
+                              " \n                                            "
+                          ),
+                          i.status.entities[0]
+                            ? _c(
+                                "a",
+                                { attrs: { href: i.status.entities[0].uri } },
+                                [_vm._v(_vm._s(i.status.entities[0].title))]
+                              )
+                            : _vm._e()
+                        ])
+                      ])
+                    ])
+                  ]),
+                  _vm._v(" "),
+                  i.status.activity == "说："
+                    ? _c("div", { staticClass: "feed-images single" }, [
+                        !i.status.images[1]
+                          ? _c("div", {
+                              staticClass: "item portrait",
+                              staticStyle: {
+                                "background-image":
+                                  "url(./radioImage/3VFkZE.jpg)",
+                                height: "300px",
+                                width: "290px",
+                                "background-size": "290px auto"
+                              }
+                            })
+                          : _vm._e(),
+                        _vm._v(" "),
+                        i.status.images[1]
+                          ? _c("div", [
+                              _c("div", {
+                                staticClass: "item portrait",
+                                staticStyle: {
+                                  "background-image":
+                                    "url(./radioImage/1cp0vh.jpg)",
+                                  height: "92px",
+                                  width: "92px",
+                                  "background-size": "92px auto"
+                                }
+                              }),
+                              _vm._v(" "),
+                              _c("div", {
+                                staticClass: "item portrait",
+                                staticStyle: {
+                                  "background-image":
+                                    "url(./radioImage/1cp0vh.jpg)",
+                                  height: "92px",
+                                  width: "92px",
+                                  "background-size": "92px auto"
+                                }
+                              })
+                            ])
+                          : _vm._e()
+                      ])
+                    : _vm._e(),
+                  _vm._v(" "),
+                  i.status.activity == "写了日记"
+                    ? _c(
+                        "div",
+                        { staticClass: "feed-card article-card  has-subtitle" },
+                        [
+                          _c(
+                            "a",
+                            {
+                              attrs: {
+                                href: "https://www.douban.com/note/637408669/"
+                              }
+                            },
+                            [
+                              _c("div", { staticClass: "title" }, [
+                                _vm._v(_vm._s(i.status.card.title))
+                              ]),
+                              _vm._v(" "),
+                              _c(
+                                "div",
+                                {
+                                  staticClass: "detail",
+                                  class: { "has-cover": i.status.card.image }
+                                },
+                                [
+                                  _c("div", { staticClass: "text" }, [
+                                    _vm._v(_vm._s(i.status.card.subtitle))
+                                  ]),
+                                  _vm._v(" "),
+                                  i.status.card.image
+                                    ? _c("div", {
+                                        staticClass: "cover",
+                                        staticStyle: {
+                                          "background-image":
+                                            "url(./radioImage/p44530630.jpg)",
+                                          height: "48px",
+                                          width: "75px",
+                                          "background-size": "75px auto"
+                                        }
+                                      })
+                                    : _vm._e()
+                                ]
+                              )
+                            ]
+                          )
+                        ]
+                      )
+                    : _vm._e(),
+                  _vm._v(" "),
+                  _c("div", { staticClass: "info" }, [
+                    _c("div", { staticClass: "ic-btn ic-btn-like left" }, [
+                      _c("i", {
+                        style: "background-image:url(./svg/ic_like_gray.svg)"
+                      }),
+                      _vm._v(" "),
+                      _c("span", { staticClass: "text" }, [
+                        _vm._v(_vm._s(i.status.like_count))
+                      ])
+                    ]),
+                    _vm._v(" "),
+                    _c("div", { staticClass: "ic-btn ic-btn-comment left" }, [
+                      _c("i", {
+                        style: "background-image:url(./svg/ic_comment.svg)"
+                      }),
+                      _vm._v(" "),
+                      _c("span", { staticClass: "text" }, [
+                        _vm._v(_vm._s(i.status.comments_count))
+                      ])
+                    ]),
+                    _vm._v(" "),
+                    _c("div", { staticClass: "ic-btn ic-btn-retweet left" }, [
+                      _c("i", {
+                        style: "background-image:url(./svg/ic_retweet_gray.svg)"
+                      }),
+                      _vm._v(" "),
+                      _c("span", { staticClass: "text" }, [
+                        _vm._v(_vm._s(i.status.reshares_count))
+                      ])
+                    ]),
+                    _vm._v(" "),
+                    _c("div", { staticClass: "ic-btn ic-btn-more right" })
+                  ])
+                ])
+              })
+            )
+          ]
+        )
+      ]),
+      _vm._v(" "),
+      _vm.eternal
+        ? _c("div", { staticClass: "card" }, [
+            _c(
+              "ul",
+              { staticClass: "status-list comment-list" },
+              _vm._l(_vm.eternal, function(e) {
+                return _c("li", [
+                  _c("div", [
+                    _c("div", { staticClass: "desc" }, [
+                      _vm._m(2, true),
+                      _vm._v(" "),
+                      _c("a", [
+                        _c("div", { staticClass: "user-info" }, [
+                          _vm._m(3, true),
+                          _vm._v(" "),
+                          _c("div", { staticClass: "timestamp" }, [
+                            _vm._v(_vm._s(e.time))
+                          ])
+                        ])
+                      ])
+                    ]),
+                    _vm._v(" "),
+                    _c(
+                      "a",
+                      { attrs: { href: "/people/3186129/status/2052193615/" } },
+                      [
+                        _c("div", { staticClass: "content" }, [
+                          _c("div", [_vm._v(_vm._s(e.eternal))])
+                        ])
+                      ]
+                    ),
+                    _vm._v(" "),
+                    _c("div", { staticClass: "feed-images single" }, [
+                      e.img[0]
+                        ? _c("img", {
+                            class: { big: e.img.length < 2 },
+                            attrs: {
+                              src:
+                                "../addImage/eternal/phone18124092479/" +
+                                e.img[0]
+                            }
+                          })
+                        : _vm._e(),
+                      _vm._v(" "),
+                      e.img[1]
+                        ? _c("img", {
+                            attrs: {
+                              src:
+                                "../addImage/eternal/phone18124092479/" +
+                                e.img[1]
+                            }
+                          })
+                        : _vm._e(),
+                      _vm._v(" "),
+                      e.img[2]
+                        ? _c("img", {
+                            attrs: {
+                              src:
+                                "../addImage/eternal/phone18124092479/" +
+                                e.img[2]
+                            }
+                          })
+                        : _vm._e(),
+                      _vm._v(" "),
+                      e.img[3]
+                        ? _c("img", {
+                            attrs: {
+                              src:
+                                "../addImage/eternal/phone18124092479/" +
+                                e.img[3]
+                            }
+                          })
+                        : _vm._e(),
+                      _vm._v(" "),
+                      e.img[4]
+                        ? _c("img", {
+                            attrs: {
+                              src:
+                                "../addImage/eternal/phone18124092479/" +
+                                e.img[4]
+                            }
+                          })
+                        : _vm._e(),
+                      _vm._v(" "),
+                      e.img[5]
+                        ? _c("img", {
+                            attrs: {
+                              src:
+                                "../addImage/eternal/phone18124092479/" +
+                                e.img[5]
+                            }
+                          })
+                        : _vm._e(),
+                      _vm._v(" "),
+                      e.img[6]
+                        ? _c("img", {
+                            attrs: {
+                              src:
+                                "../addImage/eternal/phone18124092479/" +
+                                e.img[6]
+                            }
+                          })
+                        : _vm._e(),
+                      _vm._v(" "),
+                      e.img[7]
+                        ? _c("img", {
+                            attrs: {
+                              src:
+                                "../addImage/eternal/phone18124092479/" +
+                                e.img[7]
+                            }
+                          })
+                        : _vm._e(),
+                      _vm._v(" "),
+                      e.img[8]
+                        ? _c("img", {
+                            attrs: {
+                              src:
+                                "../addImage/eternal/phone18124092479/" +
+                                e.img[8]
+                            }
+                          })
+                        : _vm._e()
+                    ])
+                  ])
+                ])
+              })
+            ),
+            _vm._v(" "),
+            _c("div")
+          ])
+        : _vm._e()
+    ])
+  ])
+}
+var staticRenderFns = [
+  function() {
+    var _vm = this
+    var _h = _vm.$createElement
+    var _c = _vm._self._c || _h
+    return _c("div", { staticClass: "avatar" }, [
+      _c("img", {
+        attrs: { src: "https://img1.doubanio.com/icon/user_normal.jpg" }
+      })
+    ])
+  },
+  function() {
+    var _vm = this
+    var _h = _vm.$createElement
+    var _c = _vm._self._c || _h
+    return _c("a", { attrs: { href: "/people/95805238/" } }, [
+      _c("img", {
+        attrs: {
+          alt: "豆瓣",
+          src: "https://img3.doubanio.com/icon/up95805238-16.jpg"
+        }
+      })
+    ])
+  },
+  function() {
+    var _vm = this
+    var _h = _vm.$createElement
+    var _c = _vm._self._c || _h
+    return _c("a", { attrs: { href: "/people/95805238/" } }, [
+      _c("img", {
+        attrs: {
+          alt: "豆瓣",
+          src: "https://img3.doubanio.com/icon/up95805238-16.jpg"
+        }
+      })
+    ])
+  },
+  function() {
+    var _vm = this
+    var _h = _vm.$createElement
+    var _c = _vm._self._c || _h
+    return _c("strong", [
+      _vm._v(
+        "\n                                        lmm\n                                        "
+      ),
+      _c("span", [_vm._v("说： ")])
+    ])
+  }
+]
+render._withStripped = true
+var esExports = { render: render, staticRenderFns: staticRenderFns }
+/* harmony default export */ __webpack_exports__["a"] = (esExports);
+if (false) {
+  module.hot.accept()
+  if (module.hot.data) {
+    require("vue-hot-reload-api")      .rerender("data-v-63925dc0", esExports)
+  }
+}
+
+/***/ }),
+/* 32 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbSendRadio_vue__ = __webpack_require__(35);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbSendRadio_vue___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbSendRadio_vue__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_vue_loader_lib_template_compiler_index_id_data_v_79074bf8_hasScoped_true_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_bustCache_dbSendRadio_vue__ = __webpack_require__(36);
+var disposed = false
+function injectStyle (ssrContext) {
+  if (disposed) return
+  __webpack_require__(33)
+}
+var normalizeComponent = __webpack_require__(2)
+/* script */
+
+/* template */
+
+/* template functional */
+  var __vue_template_functional__ = false
+/* styles */
+var __vue_styles__ = injectStyle
+/* scopeId */
+var __vue_scopeId__ = "data-v-79074bf8"
+/* moduleIdentifier (server only) */
+var __vue_module_identifier__ = null
+var Component = normalizeComponent(
+  __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_bustCache_dbSendRadio_vue___default.a,
+  __WEBPACK_IMPORTED_MODULE_1__node_modules_vue_loader_lib_template_compiler_index_id_data_v_79074bf8_hasScoped_true_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_bustCache_dbSendRadio_vue__["a" /* default */],
+  __vue_template_functional__,
+  __vue_styles__,
+  __vue_scopeId__,
+  __vue_module_identifier__
+)
+Component.options.__file = "components\\lantao\\dbSendRadio.vue"
+if (Component.esModule && Object.keys(Component.esModule).some(function (key) {  return key !== "default" && key.substr(0, 2) !== "__"})) {  console.error("named exports are not supported in *.vue files.")}
+
+/* hot reload */
+if (false) {(function () {
+  var hotAPI = require("vue-hot-reload-api")
+  hotAPI.install(require("vue"), false)
+  if (!hotAPI.compatible) return
+  module.hot.accept()
+  if (!module.hot.data) {
+    hotAPI.createRecord("data-v-79074bf8", Component.options)
+  } else {
+    hotAPI.reload("data-v-79074bf8", Component.options)
+  }
+  module.hot.dispose(function (data) {
+    disposed = true
+  })
+})()}
+
+/* harmony default export */ __webpack_exports__["default"] = (Component.exports);
+
+
+/***/ }),
+/* 33 */
+/***/ (function(module, exports, __webpack_require__) {
+
+// style-loader: Adds some css to the DOM by adding a <style> tag
+
+// load the styles
+var content = __webpack_require__(34);
+if(typeof content === 'string') content = [[module.i, content, '']];
+if(content.locals) module.exports = content.locals;
+// add the styles to the DOM
+var update = __webpack_require__(1)("54548e22", content, false);
+// Hot Module Replacement
+if(false) {
+ // When the styles change, update the <style> tags
+ if(!content.locals) {
+   module.hot.accept("!!../../node_modules/css-loader/index.js?sourceMap!../../node_modules/vue-loader/lib/style-compiler/index.js?{\"vue\":true,\"id\":\"data-v-79074bf8\",\"scoped\":true,\"hasInlineConfig\":false}!../../node_modules/vue-loader/lib/selector.js?type=styles&index=0&bustCache!./dbSendRadio.vue", function() {
+     var newContent = require("!!../../node_modules/css-loader/index.js?sourceMap!../../node_modules/vue-loader/lib/style-compiler/index.js?{\"vue\":true,\"id\":\"data-v-79074bf8\",\"scoped\":true,\"hasInlineConfig\":false}!../../node_modules/vue-loader/lib/selector.js?type=styles&index=0&bustCache!./dbSendRadio.vue");
+     if(typeof newContent === 'string') newContent = [[module.id, newContent, '']];
+     update(newContent);
+   });
+ }
+ // When the module is disposed, remove the <style> tags
+ module.hot.dispose(function() { update(); });
+}
+
+/***/ }),
+/* 34 */
+/***/ (function(module, exports, __webpack_require__) {
+
+exports = module.exports = __webpack_require__(0)(true);
+// imports
+
+
+// module
+exports.push([module.i, "\n.pop-page-header.show[data-v-79074bf8] {\r\n    display: block;\n}\n.pop-page-header[data-v-79074bf8] {\r\n    position: relative;\r\n    position: fixed;\r\n    left: 0;\r\n    top: 0;\r\n    height: 44px;\r\n    width: 100%;\r\n    padding: 14px 0;\r\n    box-sizing: border-box;\r\n    font-size: 17px;\r\n    line-height: 17px;\r\n    background: #fff;\r\n    z-index: 10002;\n}\n.pop-page-header .title[data-v-79074bf8] {\r\n    position: absolute;\r\n    left: 0;\r\n    top: 0;\r\n    width: 100%;\r\n    box-sizing: border-box;\r\n    padding: inherit;\r\n    text-align: center;\n}\n.pop-page-header .btn-left[data-v-79074bf8] {\r\n    float: left;\n}\n.pop-page-header .btn[data-v-79074bf8] {\r\n    color: #42bd56;\r\n    cursor: pointer;\r\n    position: relative;\r\n    padding: 14px 18px;\r\n    margin: -14px 0;\n}\n.pop-page-header .btn-right[data-v-79074bf8] {\r\n    float: right;\n}\n.pop-page-header .btn[data-v-79074bf8] {\r\n    cursor: pointer;\r\n    position: relative;\r\n    padding: 14px 18px;\n}\n.content[data-v-79074bf8]{\r\n    width:100%;\n}\n.status-editor .editor-wrapper .editor[data-v-79074bf8] {\r\n    height: 150px;\r\n    padding:8px;\r\n    margin-top: 50px;\r\n    outline: none;\r\n    border:0 none;\r\n    overflow-x: hidden;\r\n    overflow-y: auto;\r\n    display: block;\r\n    position: relative;\r\n    font-size: 17px;\r\n    width:95%;\r\n    font-family: \"Helvetica Neue\",Helvetica,Roboto,Arial,sans-serif;\r\n\r\n    resize: none;\n}\ntextarea[data-v-79074bf8]::-webkit-input-placeholder{\r\n    color:#ccc;\n}\n.pop-page-header[data-v-79074bf8]::after {\r\n    left: 0;\r\n    bottom: 0;\r\n    width: 100%;\r\n    height: 1px;\r\n    background: #E8E8E8;\r\n    content: '';\r\n    position: absolute;\n}\n.status-editor .info-bar[data-v-79074bf8] {\r\n    position: relative;\r\n    z-index: 10001;\r\n    overflow: hidden;\r\n    height: 44px;\r\n    /*margin: 0 -18px;*/\r\n    padding: 10px 18px;\r\n    margin-top:10px;\r\n    box-sizing: border-box;\n}\n.status-editor .info-bar .num[data-v-79074bf8] {\r\n    color: #aaa;\r\n    font-size: 15px;\r\n    float: right;\r\n    line-height: 24px;\n}\n.status-editor .info-bar[data-v-79074bf8]::before{\r\n    left: 0;\r\n    top: 0;\r\n    width: 100%;\r\n    height: 1px;\r\n    background: #E8E8E8;\r\n    content: '';\r\n    position: absolute;\n}\n.status-editor .info-bar[data-v-79074bf8]::after {\r\n    left: 0;\r\n    bottom: 0;\r\n    width: 100%;\r\n    height: 1px;\r\n    background: #E8E8E8;\r\n    content: '';\r\n    position: absolute;\n}\n.status-editor .info-bar .btn[data-v-79074bf8] {\r\n    background: center/cover no-repeat;\r\n    width: 24px;\r\n    height: 24px;\r\n    float: left;\r\n    cursor: pointer;\r\n    margin-right: 25px;\n}\n.status-editor .info-bar .btn.btn-camera input[data-v-79074bf8] {\r\n    width: 100%;\r\n    height: 100%;\r\n    opacity: 0;\r\n    cursor: pointer;\n}\n.status-editor .info-bar .btn[data-v-79074bf8] {\r\n    background: center/cover no-repeat;\r\n    width: 24px;\r\n    height: 24px;\r\n    float: left;\r\n    cursor: pointer;\r\n    margin-right: 25px;\n}\n.images[data-v-79074bf8]{\r\n    width:80px;\r\n    height:80px;\r\n    border:1px solid #42bd56;;\r\n    float:left;\r\n    margin-left:8px;\r\n    margin-top:5px;\r\n    border-radius: 10px;\r\n    position:relative;\n}\n.images img[data-v-79074bf8]{\r\n    width:100%;\r\n    height:100%;\n}\n.del[data-v-79074bf8]::before {\r\n    content: \"\\D7\";\r\n    font-family: sans-serif;\r\n    font-size: 13px;\r\n    color: #fff;\r\n    font-weight: 200;\r\n    display: block;\n}\n.del[data-v-79074bf8]{\r\n    font-style: normal;\r\n    position: absolute;\r\n    top: 4px;\r\n    right: 4px;\r\n    width: 20px;\r\n    height: 20px;\r\n    text-align: center;\r\n    background-color: rgba(0,0,0,0.7);\r\n    border-radius: 50%;\r\n    display: flex;\r\n    justify-content: center;\n}\r\n", "", {"version":3,"sources":["C:/Users/Administrator/Desktop/douban/douBanSix/components/lantao/components/lantao/dbSendRadio.vue?ecfa4b2a"],"names":[],"mappings":";AA4MA;IACA,eAAA;CACA;AACA;IACA,mBAAA;IACA,gBAAA;IACA,QAAA;IACA,OAAA;IACA,aAAA;IACA,YAAA;IACA,gBAAA;IACA,uBAAA;IACA,gBAAA;IACA,kBAAA;IACA,iBAAA;IACA,eAAA;CACA;AACA;IACA,mBAAA;IACA,QAAA;IACA,OAAA;IACA,YAAA;IACA,uBAAA;IACA,iBAAA;IACA,mBAAA;CACA;AACA;IACA,YAAA;CACA;AACA;IACA,eAAA;IACA,gBAAA;IACA,mBAAA;IACA,mBAAA;IACA,gBAAA;CACA;AACA;IACA,aAAA;CACA;AACA;IACA,gBAAA;IACA,mBAAA;IACA,mBAAA;CACA;AACA;IACA,WAAA;CACA;AACA;IACA,cAAA;IACA,YAAA;IACA,iBAAA;IACA,cAAA;IACA,cAAA;IACA,mBAAA;IACA,iBAAA;IACA,eAAA;IACA,mBAAA;IACA,gBAAA;IACA,UAAA;IACA,gEAAA;;IAEA,aAAA;CACA;AACA;IACA,WAAA;CACA;AACA;IACA,QAAA;IACA,UAAA;IACA,YAAA;IACA,YAAA;IACA,oBAAA;IACA,YAAA;IACA,mBAAA;CACA;AACA;IACA,mBAAA;IACA,eAAA;IACA,iBAAA;IACA,aAAA;IACA,oBAAA;IACA,mBAAA;IACA,gBAAA;IACA,uBAAA;CACA;AACA;IACA,YAAA;IACA,gBAAA;IACA,aAAA;IACA,kBAAA;CACA;AACA;IACA,QAAA;IACA,OAAA;IACA,YAAA;IACA,YAAA;IACA,oBAAA;IACA,YAAA;IACA,mBAAA;CACA;AACA;IACA,QAAA;IACA,UAAA;IACA,YAAA;IACA,YAAA;IACA,oBAAA;IACA,YAAA;IACA,mBAAA;CACA;AACA;IACA,mCAAA;IACA,YAAA;IACA,aAAA;IACA,YAAA;IACA,gBAAA;IACA,mBAAA;CACA;AACA;IACA,YAAA;IACA,aAAA;IACA,WAAA;IACA,gBAAA;CACA;AACA;IACA,mCAAA;IACA,YAAA;IACA,aAAA;IACA,YAAA;IACA,gBAAA;IACA,mBAAA;CACA;AACA;IACA,WAAA;IACA,YAAA;IACA,yBAAA;IACA,WAAA;IACA,gBAAA;IACA,eAAA;IACA,oBAAA;IACA,kBAAA;CAEA;AACA;IACA,WAAA;IACA,YAAA;CACA;AACA;IACA,eAAA;IACA,wBAAA;IACA,gBAAA;IACA,YAAA;IACA,iBAAA;IACA,eAAA;CACA;AACA;IACA,mBAAA;IACA,mBAAA;IACA,SAAA;IACA,WAAA;IACA,YAAA;IACA,aAAA;IACA,mBAAA;IACA,kCAAA;IACA,mBAAA;IACA,cAAA;IACA,wBAAA;CACA","file":"dbSendRadio.vue","sourcesContent":["<template>\r\n    <div class=\"dbSendRadio\">\r\n        <div class=\"pop-page show status-editor\">\r\n            <div class=\"content\">\r\n                <div class=\"editor-wrapper\">\r\n                    <textarea v-getRadio maxlength='140' name=\"radio\" class=\"editor\" placeholder=\"分享生活点滴...\" >{{content}}</textarea>\r\n                </div>\r\n                <div class=\"info-bar\">\r\n                    <div class=\"btn btn-camera\" style=\"background-image:url(../svg/ic_status_camera_green.svg);\">\r\n                        <form action=\"#\" id=\"files\" v-sendToBase=\"upload\">\r\n                            <input id=\"file\" type=\"file\" accept=\"image/*\" name=\"image\" multiple>\r\n                        </form>\r\n                        \r\n                    </div>\r\n                    <div class=\"btn btn-at\" style=\"background-image:url(../svg/ic_status_at_green.svg);\"></div>\r\n                    <div class=\"btn btn-hash\" style=\"background-image:url(../svg/ic_status_hash_green.svg);\"></div>\r\n                    <div class=\"num \">{{codelen}}</div>\r\n                </div>\r\n            </div>\r\n        </div>\r\n        <div>\r\n            <div class=\"pop-page-header header show\">\r\n                <span class=\"title\">发广播</span>\r\n                <div class=\"btn btn-left\" v-cancel>取消</div>\r\n                <div class=\"btn btn-right disable\" v-publish>发布</div>\r\n            </div>\r\n        </div>\r\n        <div v-for=\"i in image\" class=\"images\">\r\n            <img :src=\"'../addImage/tamp/phone18124092479/' + i\" :dataid=\"i\"/>\r\n            <i class=\"del\" v-deleImage></i>\r\n        </div>\r\n    </div>\r\n</template>\r\n<script>\r\n    // import C from \"../../js/cookie.js\";\r\n    export default {\r\n        data(){\r\n            return{\r\n                image:[],\r\n                codelen:140,\r\n                content:'',\r\n                eternalContent:[]\r\n            }\r\n        },\r\n        methods:{\r\n            init:function(){\r\n                this.image = [];\r\n                this.content = '';\r\n                this.codelen = 140;\r\n                C.set('content','',null,'/');\r\n                console.log(4555);\r\n            },\r\n            createTmp:function(){\r\n                $.ajax({\r\n                    type:'get',\r\n                    url:'http://localhost:12345/addImage',\r\n                    success:function(data){\r\n                        if(!data)return;\r\n                        console.log(\"创建成功\");\r\n                    }\r\n                })\r\n\r\n            },\r\n            mountedImage:function(){\r\n                var self = this;\r\n                $.ajax({\r\n                    type:'get',\r\n                    url:'http://localhost:12345/mountedImage',\r\n                    success:function(data){\r\n                        if(!data)return;\r\n                        \r\n                        self.image = data;\r\n                    }\r\n                })\r\n            },\r\n            upload:function(){\r\n                    var self = this;\r\n                   $.ajax({\r\n                        url: 'http://localhost:12345/profile',\r\n                        type: 'POST',\r\n                        cache: false,\r\n                        data: new FormData($('#files')[0]),\r\n                        processData: false,\r\n                        contentType: false,\r\n                        success: function(data) {\r\n                            if(!data)return;\r\n                            //拼接数组\r\n                            self.image = self.image.concat(data.slice(0,-1).split(','));\r\n                        }\r\n                })\r\n            },\r\n            cancel:function(){\r\n                \r\n            }\r\n\r\n        },\r\n        mounted:function(){\r\n            this.createTmp();\r\n            this.mountedImage();\r\n            this.content = C.get('content');\r\n            this.eternalContent = JSON.parse(C.get('eternal'));\r\n            this.codelen = 140 - this.content.length;\r\n        },\r\n        directives:{\r\n            getRadio:{\r\n                bind:function(el,binding,vnode){\r\n                    $(el).on('input',()=>{\r\n                        var str = $(el).val();\r\n                        //vnode.context指向这个对象\r\n                        vnode.context.codelen = 140 - str.length;\r\n                        // console.log(str);\r\n                        document.cookie = 'content=' + str;\r\n                        vnode.context.content = str;\r\n                        console.log(vnode.context.content);\r\n                        console.log(1234);\r\n                        // console.log(str.length,binding,vnode.context.codelen);\r\n                    })\r\n                    \r\n                }\r\n            },\r\n            publish:{\r\n                bind:function(el,binding,vnode){\r\n                    var self = vnode.context;\r\n                    $(el).on('click',()=>{\r\n                        $.ajax({\r\n                            type:'get',\r\n                            url:'http://localhost:12345/publish',\r\n                            success:function(data){\r\n                                if(!data || self.content == '')return;\r\n                                var now = new Date();\r\n                                now.setDate(now.getDate()+7);\r\n                                // self.eternalContent += self.content+',';\r\n                                var user = {\r\n                                    id:'',\r\n                                    eternal:self.content,\r\n                                    time:new Date().format(\"yyyy-MM-dd hh:mm:ss\"),\r\n                                    img:self.image\r\n                                };\r\n                                self.eternalContent.push(user);\r\n                                C.set('eternal',JSON.stringify(self.eternalContent),now,'/');\r\n                                self.init();\r\n                                $(\".editor\").val('');\r\n                                console.log(self.eternalContent);\r\n                                router.push('radio');\r\n                            }\r\n\r\n                        })\r\n                    })\r\n                    \r\n                }\r\n            },\r\n            sendToBase:{\r\n                bind:function(el,binding){\r\n                    $(el).on('change',function(){\r\n                        binding.value();\r\n                    })\r\n                }\r\n                \r\n            },\r\n            deleImage:{\r\n                bind:function(el,binding){\r\n                    el.onclick = function(){\r\n                        var $par = $(el).parent('.images');\r\n                        var src = $par.children('img').attr('dataid');\r\n                        $.ajax({\r\n                            type:'get',\r\n                            url:'http://localhost:12345/deleImage',\r\n                            data:{'src':src},\r\n                            success:function(res){\r\n                                if(!res)return;\r\n                                $par.remove();\r\n                            }\r\n                        })\r\n                    }\r\n                }\r\n            },\r\n            cancel:{\r\n                bind:function(el,binding,vnode){\r\n                    $(el).on('click',function(){\r\n                        var self = vnode.context;\r\n                        $.ajax({\r\n                            type:'get',\r\n                            url:'http://localhost:12345/delAll',\r\n                            success:function(data){\r\n                                if(!data)return;\r\n                                self.init();\r\n                                C.set('content','',null,'/');\r\n                                $(\".editor\").val('');\r\n                                console.log(4352345)\r\n                            }\r\n                        })\r\n                    })\r\n                    \r\n                }\r\n            }\r\n        },\r\n        computed:{\r\n            s(){\r\n                return this.content;\r\n            }\r\n        }\r\n    }\r\n</script> \r\n<style scoped>\r\n.pop-page-header.show {\r\n    display: block;\r\n}\r\n.pop-page-header {\r\n    position: relative;\r\n    position: fixed;\r\n    left: 0;\r\n    top: 0;\r\n    height: 44px;\r\n    width: 100%;\r\n    padding: 14px 0;\r\n    box-sizing: border-box;\r\n    font-size: 17px;\r\n    line-height: 17px;\r\n    background: #fff;\r\n    z-index: 10002;\r\n}\r\n.pop-page-header .title {\r\n    position: absolute;\r\n    left: 0;\r\n    top: 0;\r\n    width: 100%;\r\n    box-sizing: border-box;\r\n    padding: inherit;\r\n    text-align: center;\r\n}\r\n.pop-page-header .btn-left {\r\n    float: left;\r\n}\r\n.pop-page-header .btn {\r\n    color: #42bd56;\r\n    cursor: pointer;\r\n    position: relative;\r\n    padding: 14px 18px;\r\n    margin: -14px 0;\r\n}\r\n.pop-page-header .btn-right {\r\n    float: right;\r\n}\r\n.pop-page-header .btn {\r\n    cursor: pointer;\r\n    position: relative;\r\n    padding: 14px 18px;\r\n}\r\n.content{\r\n    width:100%;\r\n}\r\n.status-editor .editor-wrapper .editor {\r\n    height: 150px;\r\n    padding:8px;\r\n    margin-top: 50px;\r\n    outline: none;\r\n    border:0 none;\r\n    overflow-x: hidden;\r\n    overflow-y: auto;\r\n    display: block;\r\n    position: relative;\r\n    font-size: 17px;\r\n    width:95%;\r\n    font-family: \"Helvetica Neue\",Helvetica,Roboto,Arial,sans-serif;\r\n\r\n    resize: none;\r\n}\r\ntextarea::-webkit-input-placeholder{\r\n    color:#ccc;\r\n}\r\n.pop-page-header::after {\r\n    left: 0;\r\n    bottom: 0;\r\n    width: 100%;\r\n    height: 1px;\r\n    background: #E8E8E8;\r\n    content: '';\r\n    position: absolute;\r\n}\r\n.status-editor .info-bar {\r\n    position: relative;\r\n    z-index: 10001;\r\n    overflow: hidden;\r\n    height: 44px;\r\n    /*margin: 0 -18px;*/\r\n    padding: 10px 18px;\r\n    margin-top:10px;\r\n    box-sizing: border-box;\r\n}\r\n.status-editor .info-bar .num {\r\n    color: #aaa;\r\n    font-size: 15px;\r\n    float: right;\r\n    line-height: 24px;\r\n}\r\n.status-editor .info-bar::before{\r\n    left: 0;\r\n    top: 0;\r\n    width: 100%;\r\n    height: 1px;\r\n    background: #E8E8E8;\r\n    content: '';\r\n    position: absolute;\r\n}\r\n.status-editor .info-bar::after {\r\n    left: 0;\r\n    bottom: 0;\r\n    width: 100%;\r\n    height: 1px;\r\n    background: #E8E8E8;\r\n    content: '';\r\n    position: absolute;\r\n}\r\n.status-editor .info-bar .btn {\r\n    background: center/cover no-repeat;\r\n    width: 24px;\r\n    height: 24px;\r\n    float: left;\r\n    cursor: pointer;\r\n    margin-right: 25px;\r\n}\r\n.status-editor .info-bar .btn.btn-camera input {\r\n    width: 100%;\r\n    height: 100%;\r\n    opacity: 0;\r\n    cursor: pointer;\r\n}\r\n.status-editor .info-bar .btn {\r\n    background: center/cover no-repeat;\r\n    width: 24px;\r\n    height: 24px;\r\n    float: left;\r\n    cursor: pointer;\r\n    margin-right: 25px;\r\n}\r\n.images{\r\n    width:80px;\r\n    height:80px;\r\n    border:1px solid #42bd56;;\r\n    float:left;\r\n    margin-left:8px;\r\n    margin-top:5px;\r\n    border-radius: 10px;\r\n    position:relative;\r\n\r\n}\r\n.images img{\r\n    width:100%;\r\n    height:100%;\r\n}\r\n.del::before {\r\n    content: \"×\";\r\n    font-family: sans-serif;\r\n    font-size: 13px;\r\n    color: #fff;\r\n    font-weight: 200;\r\n    display: block;\r\n}\r\n.del{\r\n    font-style: normal;\r\n    position: absolute;\r\n    top: 4px;\r\n    right: 4px;\r\n    width: 20px;\r\n    height: 20px;\r\n    text-align: center;\r\n    background-color: rgba(0,0,0,0.7);\r\n    border-radius: 50%;\r\n    display: flex;\r\n    justify-content: center;\r\n}\r\n</style>"],"sourceRoot":""}]);
+
+// exports
+
+
+/***/ }),
+/* 35 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+
+// import C from "../../js/cookie.js";
+exports.default = {
+    data: function data() {
+        return {
+            image: [],
+            codelen: 140,
+            content: '',
+            eternalContent: []
+        };
+    },
+
+    methods: {
+        init: function init() {
+            this.image = [];
+            this.content = '';
+            this.codelen = 140;
+            C.set('content', '', null, '/');
+            console.log(4555);
+        },
+        createTmp: function createTmp() {
+            $.ajax({
+                type: 'get',
+                url: 'http://localhost:12345/addImage',
+                success: function success(data) {
+                    if (!data) return;
+                    console.log("创建成功");
+                }
+            });
+        },
+        mountedImage: function mountedImage() {
+            var self = this;
+            $.ajax({
+                type: 'get',
+                url: 'http://localhost:12345/mountedImage',
+                success: function success(data) {
+                    if (!data) return;
+
+                    self.image = data;
+                }
+            });
+        },
+        upload: function upload() {
+            var self = this;
+            $.ajax({
+                url: 'http://localhost:12345/profile',
+                type: 'POST',
+                cache: false,
+                data: new FormData($('#files')[0]),
+                processData: false,
+                contentType: false,
+                success: function success(data) {
+                    if (!data) return;
+                    //拼接数组
+                    self.image = self.image.concat(data.slice(0, -1).split(','));
+                }
+            });
+        },
+        cancel: function cancel() {}
+
+    },
+    mounted: function mounted() {
+        this.createTmp();
+        this.mountedImage();
+        this.content = C.get('content');
+        this.eternalContent = JSON.parse(C.get('eternal'));
+        this.codelen = 140 - this.content.length;
+    },
+    directives: {
+        getRadio: {
+            bind: function bind(el, binding, vnode) {
+                $(el).on('input', function () {
+                    var str = $(el).val();
+                    //vnode.context指向这个对象
+                    vnode.context.codelen = 140 - str.length;
+                    // console.log(str);
+                    document.cookie = 'content=' + str;
+                    vnode.context.content = str;
+                    console.log(vnode.context.content);
+                    console.log(1234);
+                    // console.log(str.length,binding,vnode.context.codelen);
+                });
+            }
+        },
+        publish: {
+            bind: function bind(el, binding, vnode) {
+                var self = vnode.context;
+                $(el).on('click', function () {
+                    $.ajax({
+                        type: 'get',
+                        url: 'http://localhost:12345/publish',
+                        success: function success(data) {
+                            if (!data || self.content == '') return;
+                            var now = new Date();
+                            now.setDate(now.getDate() + 7);
+                            // self.eternalContent += self.content+',';
+                            var user = {
+                                id: '',
+                                eternal: self.content,
+                                time: new Date().format("yyyy-MM-dd hh:mm:ss"),
+                                img: self.image
+                            };
+                            self.eternalContent.push(user);
+                            C.set('eternal', JSON.stringify(self.eternalContent), now, '/');
+                            self.init();
+                            $(".editor").val('');
+                            console.log(self.eternalContent);
+                            router.push('radio');
+                        }
+
+                    });
+                });
+            }
+        },
+        sendToBase: {
+            bind: function bind(el, binding) {
+                $(el).on('change', function () {
+                    binding.value();
+                });
+            }
+
+        },
+        deleImage: {
+            bind: function bind(el, binding) {
+                el.onclick = function () {
+                    var $par = $(el).parent('.images');
+                    var src = $par.children('img').attr('dataid');
+                    $.ajax({
+                        type: 'get',
+                        url: 'http://localhost:12345/deleImage',
+                        data: { 'src': src },
+                        success: function success(res) {
+                            if (!res) return;
+                            $par.remove();
+                        }
+                    });
+                };
+            }
+        },
+        cancel: {
+            bind: function bind(el, binding, vnode) {
+                $(el).on('click', function () {
+                    var self = vnode.context;
+                    $.ajax({
+                        type: 'get',
+                        url: 'http://localhost:12345/delAll',
+                        success: function success(data) {
+                            if (!data) return;
+                            self.init();
+                            C.set('content', '', null, '/');
+                            $(".editor").val('');
+                            console.log(4352345);
+                        }
+                    });
+                });
+            }
+        }
+    },
+    computed: {
+        s: function s() {
+            return this.content;
+        }
+    }
+};
+
+/***/ }),
+/* 36 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+var render = function() {
+  var _vm = this
+  var _h = _vm.$createElement
+  var _c = _vm._self._c || _h
+  return _c(
+    "div",
+    { staticClass: "dbSendRadio" },
+    [
+      _c("div", { staticClass: "pop-page show status-editor" }, [
+        _c("div", { staticClass: "content" }, [
+          _c("div", { staticClass: "editor-wrapper" }, [
+            _c(
+              "textarea",
+              {
+                directives: [{ name: "getRadio", rawName: "v-getRadio" }],
+                staticClass: "editor",
+                attrs: {
+                  maxlength: "140",
+                  name: "radio",
+                  placeholder: "分享生活点滴..."
+                }
+              },
+              [_vm._v(_vm._s(_vm.content))]
+            )
+          ]),
+          _vm._v(" "),
+          _c("div", { staticClass: "info-bar" }, [
+            _c(
+              "div",
+              {
+                staticClass: "btn btn-camera",
+                staticStyle: {
+                  "background-image": "url(../svg/ic_status_camera_green.svg)"
+                }
+              },
+              [
+                _c(
+                  "form",
+                  {
+                    directives: [
+                      {
+                        name: "sendToBase",
+                        rawName: "v-sendToBase",
+                        value: _vm.upload,
+                        expression: "upload"
+                      }
+                    ],
+                    attrs: { action: "#", id: "files" }
+                  },
+                  [
+                    _c("input", {
+                      attrs: {
+                        id: "file",
+                        type: "file",
+                        accept: "image/*",
+                        name: "image",
+                        multiple: ""
+                      }
+                    })
+                  ]
+                )
+              ]
+            ),
+            _vm._v(" "),
+            _c("div", {
+              staticClass: "btn btn-at",
+              staticStyle: {
+                "background-image": "url(../svg/ic_status_at_green.svg)"
+              }
+            }),
+            _vm._v(" "),
+            _c("div", {
+              staticClass: "btn btn-hash",
+              staticStyle: {
+                "background-image": "url(../svg/ic_status_hash_green.svg)"
+              }
+            }),
+            _vm._v(" "),
+            _c("div", { staticClass: "num " }, [_vm._v(_vm._s(_vm.codelen))])
+          ])
+        ])
+      ]),
+      _vm._v(" "),
+      _c("div", [
+        _c("div", { staticClass: "pop-page-header header show" }, [
+          _c("span", { staticClass: "title" }, [_vm._v("发广播")]),
+          _vm._v(" "),
+          _c(
+            "div",
+            {
+              directives: [{ name: "cancel", rawName: "v-cancel" }],
+              staticClass: "btn btn-left"
+            },
+            [_vm._v("取消")]
+          ),
+          _vm._v(" "),
+          _c(
+            "div",
+            {
+              directives: [{ name: "publish", rawName: "v-publish" }],
+              staticClass: "btn btn-right disable"
+            },
+            [_vm._v("发布")]
+          )
+        ])
+      ]),
+      _vm._v(" "),
+      _vm._l(_vm.image, function(i) {
+        return _c("div", { staticClass: "images" }, [
+          _c("img", {
+            attrs: { src: "../addImage/tamp/phone18124092479/" + i, dataid: i }
+          }),
+          _vm._v(" "),
+          _c("i", {
+            directives: [{ name: "deleImage", rawName: "v-deleImage" }],
+            staticClass: "del"
+          })
+        ])
+      })
+    ],
+    2
+  )
 }
 var staticRenderFns = []
 render._withStripped = true
@@ -24849,9 +27598,522 @@ var esExports = { render: render, staticRenderFns: staticRenderFns }
 if (false) {
   module.hot.accept()
   if (module.hot.data) {
-    require("vue-hot-reload-api")      .rerender("data-v-3691de89", esExports)
+    require("vue-hot-reload-api")      .rerender("data-v-79074bf8", esExports)
   }
 }
 
+/***/ }),
+/* 37 */
+/***/ (function(module, exports, __webpack_require__) {
+
+// style-loader: Adds some css to the DOM by adding a <style> tag
+
+// load the styles
+var content = __webpack_require__(38);
+if(typeof content === 'string') content = [[module.i, content, '']];
+// Prepare cssTransformation
+var transform;
+
+var options = {"hmr":true}
+options.transform = transform
+// add the styles to the DOM
+var update = __webpack_require__(39)(content, options);
+if(content.locals) module.exports = content.locals;
+// Hot Module Replacement
+if(false) {
+	// When the styles change, update the <style> tags
+	if(!content.locals) {
+		module.hot.accept("!!../node_modules/css-loader/index.js!./base.css", function() {
+			var newContent = require("!!../node_modules/css-loader/index.js!./base.css");
+			if(typeof newContent === 'string') newContent = [[module.id, newContent, '']];
+			update(newContent);
+		});
+	}
+	// When the module is disposed, remove the <style> tags
+	module.hot.dispose(function() { update(); });
+}
+
+/***/ }),
+/* 38 */
+/***/ (function(module, exports, __webpack_require__) {
+
+exports = module.exports = __webpack_require__(0)(undefined);
+// imports
+
+
+// module
+exports.push([module.i, "body,html,div,p,li,nav,header,ul{\r\n    padding:0;margin:0;\r\n}\r\nul,li{\r\n    list-style:none;\r\n}\r\na{\r\n    text-decoration: none;color:#666;\r\n}\r\ni{\r\n    font-style:normal;\r\n}\r\n", ""]);
+
+// exports
+
+
+/***/ }),
+/* 39 */
+/***/ (function(module, exports, __webpack_require__) {
+
+/*
+	MIT License http://www.opensource.org/licenses/mit-license.php
+	Author Tobias Koppers @sokra
+*/
+
+var stylesInDom = {};
+
+var	memoize = function (fn) {
+	var memo;
+
+	return function () {
+		if (typeof memo === "undefined") memo = fn.apply(this, arguments);
+		return memo;
+	};
+};
+
+var isOldIE = memoize(function () {
+	// Test for IE <= 9 as proposed by Browserhacks
+	// @see http://browserhacks.com/#hack-e71d8692f65334173fee715c222cb805
+	// Tests for existence of standard globals is to allow style-loader
+	// to operate correctly into non-standard environments
+	// @see https://github.com/webpack-contrib/style-loader/issues/177
+	return window && document && document.all && !window.atob;
+});
+
+var getElement = (function (fn) {
+	var memo = {};
+
+	return function(selector) {
+		if (typeof memo[selector] === "undefined") {
+			var styleTarget = fn.call(this, selector);
+			// Special case to return head of iframe instead of iframe itself
+			if (styleTarget instanceof window.HTMLIFrameElement) {
+				try {
+					// This will throw an exception if access to iframe is blocked
+					// due to cross-origin restrictions
+					styleTarget = styleTarget.contentDocument.head;
+				} catch(e) {
+					styleTarget = null;
+				}
+			}
+			memo[selector] = styleTarget;
+		}
+		return memo[selector]
+	};
+})(function (target) {
+	return document.querySelector(target)
+});
+
+var singleton = null;
+var	singletonCounter = 0;
+var	stylesInsertedAtTop = [];
+
+var	fixUrls = __webpack_require__(40);
+
+module.exports = function(list, options) {
+	if (typeof DEBUG !== "undefined" && DEBUG) {
+		if (typeof document !== "object") throw new Error("The style-loader cannot be used in a non-browser environment");
+	}
+
+	options = options || {};
+
+	options.attrs = typeof options.attrs === "object" ? options.attrs : {};
+
+	// Force single-tag solution on IE6-9, which has a hard limit on the # of <style>
+	// tags it will allow on a page
+	if (!options.singleton) options.singleton = isOldIE();
+
+	// By default, add <style> tags to the <head> element
+	if (!options.insertInto) options.insertInto = "head";
+
+	// By default, add <style> tags to the bottom of the target
+	if (!options.insertAt) options.insertAt = "bottom";
+
+	var styles = listToStyles(list, options);
+
+	addStylesToDom(styles, options);
+
+	return function update (newList) {
+		var mayRemove = [];
+
+		for (var i = 0; i < styles.length; i++) {
+			var item = styles[i];
+			var domStyle = stylesInDom[item.id];
+
+			domStyle.refs--;
+			mayRemove.push(domStyle);
+		}
+
+		if(newList) {
+			var newStyles = listToStyles(newList, options);
+			addStylesToDom(newStyles, options);
+		}
+
+		for (var i = 0; i < mayRemove.length; i++) {
+			var domStyle = mayRemove[i];
+
+			if(domStyle.refs === 0) {
+				for (var j = 0; j < domStyle.parts.length; j++) domStyle.parts[j]();
+
+				delete stylesInDom[domStyle.id];
+			}
+		}
+	};
+};
+
+function addStylesToDom (styles, options) {
+	for (var i = 0; i < styles.length; i++) {
+		var item = styles[i];
+		var domStyle = stylesInDom[item.id];
+
+		if(domStyle) {
+			domStyle.refs++;
+
+			for(var j = 0; j < domStyle.parts.length; j++) {
+				domStyle.parts[j](item.parts[j]);
+			}
+
+			for(; j < item.parts.length; j++) {
+				domStyle.parts.push(addStyle(item.parts[j], options));
+			}
+		} else {
+			var parts = [];
+
+			for(var j = 0; j < item.parts.length; j++) {
+				parts.push(addStyle(item.parts[j], options));
+			}
+
+			stylesInDom[item.id] = {id: item.id, refs: 1, parts: parts};
+		}
+	}
+}
+
+function listToStyles (list, options) {
+	var styles = [];
+	var newStyles = {};
+
+	for (var i = 0; i < list.length; i++) {
+		var item = list[i];
+		var id = options.base ? item[0] + options.base : item[0];
+		var css = item[1];
+		var media = item[2];
+		var sourceMap = item[3];
+		var part = {css: css, media: media, sourceMap: sourceMap};
+
+		if(!newStyles[id]) styles.push(newStyles[id] = {id: id, parts: [part]});
+		else newStyles[id].parts.push(part);
+	}
+
+	return styles;
+}
+
+function insertStyleElement (options, style) {
+	var target = getElement(options.insertInto)
+
+	if (!target) {
+		throw new Error("Couldn't find a style target. This probably means that the value for the 'insertInto' parameter is invalid.");
+	}
+
+	var lastStyleElementInsertedAtTop = stylesInsertedAtTop[stylesInsertedAtTop.length - 1];
+
+	if (options.insertAt === "top") {
+		if (!lastStyleElementInsertedAtTop) {
+			target.insertBefore(style, target.firstChild);
+		} else if (lastStyleElementInsertedAtTop.nextSibling) {
+			target.insertBefore(style, lastStyleElementInsertedAtTop.nextSibling);
+		} else {
+			target.appendChild(style);
+		}
+		stylesInsertedAtTop.push(style);
+	} else if (options.insertAt === "bottom") {
+		target.appendChild(style);
+	} else if (typeof options.insertAt === "object" && options.insertAt.before) {
+		var nextSibling = getElement(options.insertInto + " " + options.insertAt.before);
+		target.insertBefore(style, nextSibling);
+	} else {
+		throw new Error("[Style Loader]\n\n Invalid value for parameter 'insertAt' ('options.insertAt') found.\n Must be 'top', 'bottom', or Object.\n (https://github.com/webpack-contrib/style-loader#insertat)\n");
+	}
+}
+
+function removeStyleElement (style) {
+	if (style.parentNode === null) return false;
+	style.parentNode.removeChild(style);
+
+	var idx = stylesInsertedAtTop.indexOf(style);
+	if(idx >= 0) {
+		stylesInsertedAtTop.splice(idx, 1);
+	}
+}
+
+function createStyleElement (options) {
+	var style = document.createElement("style");
+
+	options.attrs.type = "text/css";
+
+	addAttrs(style, options.attrs);
+	insertStyleElement(options, style);
+
+	return style;
+}
+
+function createLinkElement (options) {
+	var link = document.createElement("link");
+
+	options.attrs.type = "text/css";
+	options.attrs.rel = "stylesheet";
+
+	addAttrs(link, options.attrs);
+	insertStyleElement(options, link);
+
+	return link;
+}
+
+function addAttrs (el, attrs) {
+	Object.keys(attrs).forEach(function (key) {
+		el.setAttribute(key, attrs[key]);
+	});
+}
+
+function addStyle (obj, options) {
+	var style, update, remove, result;
+
+	// If a transform function was defined, run it on the css
+	if (options.transform && obj.css) {
+	    result = options.transform(obj.css);
+
+	    if (result) {
+	    	// If transform returns a value, use that instead of the original css.
+	    	// This allows running runtime transformations on the css.
+	    	obj.css = result;
+	    } else {
+	    	// If the transform function returns a falsy value, don't add this css.
+	    	// This allows conditional loading of css
+	    	return function() {
+	    		// noop
+	    	};
+	    }
+	}
+
+	if (options.singleton) {
+		var styleIndex = singletonCounter++;
+
+		style = singleton || (singleton = createStyleElement(options));
+
+		update = applyToSingletonTag.bind(null, style, styleIndex, false);
+		remove = applyToSingletonTag.bind(null, style, styleIndex, true);
+
+	} else if (
+		obj.sourceMap &&
+		typeof URL === "function" &&
+		typeof URL.createObjectURL === "function" &&
+		typeof URL.revokeObjectURL === "function" &&
+		typeof Blob === "function" &&
+		typeof btoa === "function"
+	) {
+		style = createLinkElement(options);
+		update = updateLink.bind(null, style, options);
+		remove = function () {
+			removeStyleElement(style);
+
+			if(style.href) URL.revokeObjectURL(style.href);
+		};
+	} else {
+		style = createStyleElement(options);
+		update = applyToTag.bind(null, style);
+		remove = function () {
+			removeStyleElement(style);
+		};
+	}
+
+	update(obj);
+
+	return function updateStyle (newObj) {
+		if (newObj) {
+			if (
+				newObj.css === obj.css &&
+				newObj.media === obj.media &&
+				newObj.sourceMap === obj.sourceMap
+			) {
+				return;
+			}
+
+			update(obj = newObj);
+		} else {
+			remove();
+		}
+	};
+}
+
+var replaceText = (function () {
+	var textStore = [];
+
+	return function (index, replacement) {
+		textStore[index] = replacement;
+
+		return textStore.filter(Boolean).join('\n');
+	};
+})();
+
+function applyToSingletonTag (style, index, remove, obj) {
+	var css = remove ? "" : obj.css;
+
+	if (style.styleSheet) {
+		style.styleSheet.cssText = replaceText(index, css);
+	} else {
+		var cssNode = document.createTextNode(css);
+		var childNodes = style.childNodes;
+
+		if (childNodes[index]) style.removeChild(childNodes[index]);
+
+		if (childNodes.length) {
+			style.insertBefore(cssNode, childNodes[index]);
+		} else {
+			style.appendChild(cssNode);
+		}
+	}
+}
+
+function applyToTag (style, obj) {
+	var css = obj.css;
+	var media = obj.media;
+
+	if(media) {
+		style.setAttribute("media", media)
+	}
+
+	if(style.styleSheet) {
+		style.styleSheet.cssText = css;
+	} else {
+		while(style.firstChild) {
+			style.removeChild(style.firstChild);
+		}
+
+		style.appendChild(document.createTextNode(css));
+	}
+}
+
+function updateLink (link, options, obj) {
+	var css = obj.css;
+	var sourceMap = obj.sourceMap;
+
+	/*
+		If convertToAbsoluteUrls isn't defined, but sourcemaps are enabled
+		and there is no publicPath defined then lets turn convertToAbsoluteUrls
+		on by default.  Otherwise default to the convertToAbsoluteUrls option
+		directly
+	*/
+	var autoFixUrls = options.convertToAbsoluteUrls === undefined && sourceMap;
+
+	if (options.convertToAbsoluteUrls || autoFixUrls) {
+		css = fixUrls(css);
+	}
+
+	if (sourceMap) {
+		// http://stackoverflow.com/a/26603875
+		css += "\n/*# sourceMappingURL=data:application/json;base64," + btoa(unescape(encodeURIComponent(JSON.stringify(sourceMap)))) + " */";
+	}
+
+	var blob = new Blob([css], { type: "text/css" });
+
+	var oldSrc = link.href;
+
+	link.href = URL.createObjectURL(blob);
+
+	if(oldSrc) URL.revokeObjectURL(oldSrc);
+}
+
+
+/***/ }),
+/* 40 */
+/***/ (function(module, exports) {
+
+
+/**
+ * When source maps are enabled, `style-loader` uses a link element with a data-uri to
+ * embed the css on the page. This breaks all relative urls because now they are relative to a
+ * bundle instead of the current page.
+ *
+ * One solution is to only use full urls, but that may be impossible.
+ *
+ * Instead, this function "fixes" the relative urls to be absolute according to the current page location.
+ *
+ * A rudimentary test suite is located at `test/fixUrls.js` and can be run via the `npm test` command.
+ *
+ */
+
+module.exports = function (css) {
+  // get current location
+  var location = typeof window !== "undefined" && window.location;
+
+  if (!location) {
+    throw new Error("fixUrls requires window.location");
+  }
+
+	// blank or null?
+	if (!css || typeof css !== "string") {
+	  return css;
+  }
+
+  var baseUrl = location.protocol + "//" + location.host;
+  var currentDir = baseUrl + location.pathname.replace(/\/[^\/]*$/, "/");
+
+	// convert each url(...)
+	/*
+	This regular expression is just a way to recursively match brackets within
+	a string.
+
+	 /url\s*\(  = Match on the word "url" with any whitespace after it and then a parens
+	   (  = Start a capturing group
+	     (?:  = Start a non-capturing group
+	         [^)(]  = Match anything that isn't a parentheses
+	         |  = OR
+	         \(  = Match a start parentheses
+	             (?:  = Start another non-capturing groups
+	                 [^)(]+  = Match anything that isn't a parentheses
+	                 |  = OR
+	                 \(  = Match a start parentheses
+	                     [^)(]*  = Match anything that isn't a parentheses
+	                 \)  = Match a end parentheses
+	             )  = End Group
+              *\) = Match anything and then a close parens
+          )  = Close non-capturing group
+          *  = Match anything
+       )  = Close capturing group
+	 \)  = Match a close parens
+
+	 /gi  = Get all matches, not the first.  Be case insensitive.
+	 */
+	var fixedCss = css.replace(/url\s*\(((?:[^)(]|\((?:[^)(]+|\([^)(]*\))*\))*)\)/gi, function(fullMatch, origUrl) {
+		// strip quotes (if they exist)
+		var unquotedOrigUrl = origUrl
+			.trim()
+			.replace(/^"(.*)"$/, function(o, $1){ return $1; })
+			.replace(/^'(.*)'$/, function(o, $1){ return $1; });
+
+		// already a full url? no change
+		if (/^(#|data:|http:\/\/|https:\/\/|file:\/\/\/)/i.test(unquotedOrigUrl)) {
+		  return fullMatch;
+		}
+
+		// convert the url to a full url
+		var newUrl;
+
+		if (unquotedOrigUrl.indexOf("//") === 0) {
+		  	//TODO: should we add protocol?
+			newUrl = unquotedOrigUrl;
+		} else if (unquotedOrigUrl.indexOf("/") === 0) {
+			// path should be relative to the base url
+			newUrl = baseUrl + unquotedOrigUrl; // already starts with '/'
+		} else {
+			// path should be relative to current directory
+			newUrl = currentDir + unquotedOrigUrl.replace(/^\.\//, ""); // Strip leading './'
+		}
+
+		// send back the fixed url(...)
+		return "url(" + JSON.stringify(newUrl) + ")";
+	});
+
+	// send back the fixed css
+	return fixedCss;
+};
+
+
 /***/ })
 /******/ ]);
+//# sourceMappingURL=bundle.js.map

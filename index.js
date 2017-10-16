@@ -5,8 +5,14 @@ import Vuex from 'vuex'
 //必须要通过 Vue.use() 明确地安装路由功能
 Vue.use(VueRouter)
 Vue.use(Vuex)
-
+//UI框架
+import "weui"//css
+import MuseUI from 'muse-ui'
+import 'muse-ui/dist/muse-ui.css'
+Vue.use(MuseUI)
+// 引入未注册路由
 import dbHome from './components/lmm/dbHome.vue'
+import noteDetail from './components/lmm/noteDetail.vue'
 //配置路由
 var router = new VueRouter({
     routes: [{
@@ -31,8 +37,16 @@ var router = new VueRouter({
             //         component: dbGroup
             //     }
             // ]
+        },
+        // {
+        //     path: '/home/movieDetail/:id',
+        //     component: movieDetail
+        // },
+        {
+            path: '/home/note/:id',
+            component: noteDetail
         }
-        // ,
+        // // ,
         // {
         //     path: '/home/detail',
         //     component: dbDetail,

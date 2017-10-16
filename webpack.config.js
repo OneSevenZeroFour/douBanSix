@@ -1,6 +1,13 @@
 var webpack = require("webpack");
+const path = require('path')
+const museUiThemePath = path.join(
+  __dirname,
+  'node_modules',
+  'muse-ui',
+  'src/styles/themes/variables/default.less'
+)
 module.exports = {
-  // devtool: "source-map",/*调试工具*/
+  devtool: "source-map",/*调试工具*/
   entry: './index.js',
   output: {
     //输出后的文件名
@@ -28,8 +35,27 @@ module.exports = {
       loader: 'style-loader!css-loader!less-loader'
     }, {
       test: /\.vue$/,
-      loader: 'vue-loader'
+      loader: 'vue-loader',
+      options: {
+        loaders: {
+          less: [
+            'vue-style-loader',
+            'css-loader',
+            {
+              loader: 'less-loader',
+              options: {
+                globalVars: {
+                  museUiTheme: `'${museUiThemePath}'`,
+                }
+              }
+            }
+          ]
+        }
+      }
     }, {
+        test: /muse-ui.src.*?js$/,
+        loader: 'babel'
+      },{
       test: /\.js$/,
     /*  options: {
         presets: ['env']
@@ -41,8 +67,9 @@ module.exports = {
   //vue2.0加上这一句
   resolve: {
     alias: {
-      vue: 'vue/dist/vue.js'
-    },
+      vue: 'vue/dist/vue.js',
+      'muse-components': 'muse-ui/src'
+    }
   },
   //插件压缩bundle.js
   // plugins: [

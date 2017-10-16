@@ -168,14 +168,19 @@
                             url:'http://localhost:12345/deleImage',
                             data:{'src':src},
                             success:function(res){
-                                if(!res)return;
-                                $par.remove();
-                                self.image.forEach(function(item,idx){
-                                    if(src === item){
-                                        self.image.splice(idx,0);
-                                    }
-                                })
-                                console.log(self.image)
+                                console.log(res);
+                                if(res){
+                                    self.image.forEach(function(item,idx){
+                                        if(src === item){
+                                            console.log(12);
+                                            self.image.splice(idx,1);
+                                            // $par.remove();   
+                                        }
+                                    })
+                                }
+                                
+
+                                console.log(self.image);
                             }
                         })
                     }

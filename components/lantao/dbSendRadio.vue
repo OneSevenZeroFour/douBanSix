@@ -158,8 +158,9 @@
                 
             },
             deleImage:{
-                bind:function(el,binding){
+                bind:function(el,binding,vnode){
                     el.onclick = function(){
+                        var self = vnode.context;
                         var $par = $(el).parent('.images');
                         var src = $par.children('img').attr('dataid');
                         $.ajax({
@@ -169,6 +170,11 @@
                             success:function(res){
                                 if(!res)return;
                                 $par.remove();
+                                self.image.forEach(function(item,idx){
+                                    if(src === item){
+                                        self.image.splice(idx,1);
+                                    }
+                                })
                             }
                         })
                     }

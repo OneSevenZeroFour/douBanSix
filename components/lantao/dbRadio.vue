@@ -42,7 +42,7 @@
                                 <div v-if="i.status.images[1]">
                                     <div class="item portrait" style="background-image:url(./radioImage/1cp0vh.jpg);height:92px;width:92px;background-size:92px auto">
                                     </div>
-                                    <div class="item portrait" style="background-image:url(./radioImage/1cp0vh.jpg);height:92px;width:92px;background-size:92px auto">
+                                    <div class="item portrait" style="background-image:url(./radioImage/3DJokh.jpg);height:92px;width:92px;background-size:92px auto">
                                     </div>
                                 </div>
                             </div>
@@ -80,7 +80,7 @@
                         <div>
                             <div class="desc">
                                 <a href="/people/95805238/">
-                                    <img alt="豆瓣" src="https://img3.doubanio.com/icon/up95805238-16.jpg">
+                                    <img alt="豆瓣" :src="'../radioImage/1.jpg'">
                                 </a>
                                 <a>
                                     <div class="user-info">

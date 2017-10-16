@@ -17,9 +17,24 @@ import dbRadio from './components/lantao/dbRadio.vue';
 import dbSendRadio from './components/lantao/dbSendRadio.vue';
 
 import "./css/base.css";
+//UI框架
+import "weui"//css
+// import MuseUI from 'muse-ui'
+// import 'muse-ui/dist/muse-ui.css'
+// Vue.use(MuseUI)
+// 引入未注册路由
+import dbHome from './components/lmm/dbHome.vue'
+import noteDetail from './components/lmm/noteDetail.vue'
 //配置路由
 var router = new VueRouter({
     routes: [{
+                path:'/',
+                redirect:'/home'
+            },{
+                path:'/home',
+                component:dbHome
+            },
+            {
                 path: '/home/movie',
                 component: dbMovie
             },
@@ -53,8 +68,16 @@ var router = new VueRouter({
             //         component: dbGroup
             //     }
             // ]
+        },
+        // {
+        //     path: '/home/movieDetail/:id',
+        //     component: movieDetail
+        // },
+        {
+            path: '/home/note/:id',
+            component: noteDetail
         }
-        // ,
+        // // ,
         // {
         //     path: '/home/detail',
         //     component: dbDetail,

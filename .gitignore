@@ -6,4 +6,5 @@ doc/
 *.zip
 *.rar
 
-bundle
+public/bundle.js
+public/bundle.js.map

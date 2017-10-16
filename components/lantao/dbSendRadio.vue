@@ -172,9 +172,10 @@
                                 $par.remove();
                                 self.image.forEach(function(item,idx){
                                     if(src === item){
-                                        self.image.splice(idx,1);
+                                        self.image.splice(idx,0);
                                     }
                                 })
+                                console.log(self.image)
                             }
                         })
                     }
